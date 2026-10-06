@@ -205,21 +205,57 @@ Additional checks:
 - One Alt+click browse is a **single** undo step; hit-testing/selection adds no
   undo point.
 - **Source-replacement regression:** after browsing, the item's **waveform and
-  playback** reflect the new file, not just its length. `SetMediaItemTake_Source`
-  alone leaves REAPER's cached item/peak state on the previous source, so the
-  script marks the item dirty (`reaper.MarkTrackItemsDirty`), calls
-  `reaper.UpdateItemInProject` and `reaper.UpdateArrange`. The old `PCM_source`
-  is intentionally **not** destroyed (REAPER may still reference it; freeing it
-  corrupted playback in testing).
-- **Playback continuity:** play through an inserted item, then play through a
-  browsed/replaced item, move the cursor past it and play again — playback must
-  continue normally and not stop immediately. Repeat the replacement several
-  times.
+  playback** must reflect the new file, not just its length.
+  `SetMediaItemTake_Source` alone leaves REAPER's cached item/peak state on the
+  previous source, so the script marks the item's track dirty
+  (`reaper.MarkTrackItemsDirty(track, item)` — the first argument must be a
+  `MediaTrack`), then calls `reaper.UpdateItemInProject` and
+  `reaper.UpdateArrange`. The old `PCM_source` is intentionally **not**
+  destroyed (REAPER may still reference it; freeing it corrupted playback in
+  testing).
+- **Insertion must not disturb playback:** insertion creates the item directly
+  and does **not** use `reaper.InsertMedia`, which moves the edit/play cursor to
+  the end of the inserted item. See the playback regression tests below.
 - One-file library → Alt+click leaves the item unchanged (safe no-op).
 - Stored library missing / current source not in library → clear message,
   nothing changed.
 - Known gap: Alt+click on an item **edge** or **fade** may not fire (separate
   REAPER context). Expected for now.
+
+## Manual test cases — playback and waveform (regression)
+
+These cover the two runtime regressions (playback stopping, stale waveform).
+They require REAPER and cannot be checked by the Lua tests.
+
+Playback:
+
+| # | Scenario | Action | Expected |
+| --- | --- | --- | --- |
+| P-A | Baseline | Empty project (no SFX items), press Play | Playback runs normally |
+| P-B | Insert while stopped | Insert an SFX, press Play | Edit cursor is at the item start; playback starts and runs |
+| P-C | Through the item | Play from before the item | Playback continues through the item and beyond (does not stop at/inside it) |
+| P-D | After the item | Move the edit cursor after the item, press Play | Playback starts and continues normally |
+| P-E | Insert while playing | Insert an SFX during playback | Playback does not stop, rewind or seek |
+| P-F | Browse while playing | Alt+click an existing SFX during playback | Playback does not stop, rewind or seek |
+| P-G | Content after the item | Put real media after the SFX, play through | Playback passes the SFX and continues into the later content |
+
+Waveform:
+
+| # | Scenario | Action | Expected |
+| --- | --- | --- | --- |
+| W-A | Source changes | Alt+click an SFX item | The item plays the new file |
+| W-B | Waveform changes | Same as W-A | The displayed waveform is the new file's, not the old one |
+| W-C | Natural length | Alt+click to a longer/shorter file | Item length becomes the new source's natural length |
+| W-D | Repeated browsing | Alt+click several times | Waveform keeps up each time |
+| W-E | Wrap-around | Alt+click at the last file | Wraps to the first; waveform updates |
+
+Undo:
+
+| # | Scenario | Action | Expected |
+| --- | --- | --- | --- |
+| U-A | One undo per insert | Insert, then `Ctrl+Z` once | The insert is undone in one step |
+| U-B | Restore previous source | Browse, then `Ctrl+Z` once | The previous source is restored in one step |
+| U-C | No extra undo points | Insert / browse, open Edit → Undo History | Exactly one entry per operation (none for cursor, selection or refresh) |
 
 ## Reporting a change
 

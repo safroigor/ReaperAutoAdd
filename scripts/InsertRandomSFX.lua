@@ -337,30 +337,46 @@ local function setProjectState(key, value)
     reaper.SetProjExtState(0, PROJ_STATE_SECTION, key, value or "")
 end
 
--- Insert `filePath` onto `track` at `pos`, returning the new media item (or
--- nil). Uses REAPER's own importer (InsertMedia) so REAPER determines the
--- media source properties, then pins the new item to the exact position.
+-- Create a media item for `filePath` on `track` at `pos`, returning the new
+-- item (or nil).
+--
+-- The item is created directly (a take + a PCM source) rather than via
+-- reaper.InsertMedia. InsertMedia inserts at the edit cursor and then moves the
+-- edit/play cursor to the END of the inserted item, which disturbs playback
+-- (and, for the Alt+click workflow, would then require the item to be moved to
+-- the mouse position). Creating the item at the exact position avoids all of
+-- that while REAPER still creates and owns the media source.
 local function insertMediaOnTrack(track, filePath, pos)
-    local existing = {}
-    for i = 0, reaper.CountTrackMediaItems(track) - 1 do
-        existing[reaper.GetTrackMediaItem(track, i)] = true
+    local source = reaper.PCM_Source_CreateFromFile(filePath)
+    if not source then return nil end
+
+    local item = reaper.AddMediaItemToTrack(track)
+    local take = item and reaper.AddTakeToMediaItem(item)
+    if not take then
+        if item then reaper.DeleteTrackMediaItem(track, item) end
+        reaper.PCM_Source_Destroy(source) -- not attached: free our own source
+        return nil
     end
 
-    reaper.InsertMedia(filePath, 0) -- 0 = add to current track
-
-    local inserted = nil
-    for i = 0, reaper.CountTrackMediaItems(track) - 1 do
-        local item = reaper.GetTrackMediaItem(track, i)
-        if not existing[item] then
-            reaper.SetMediaItemInfo_Value(item, "D_POSITION", pos)
-            inserted = item
-        end
+    if not reaper.SetMediaItemTake_Source(take, source) then
+        reaper.DeleteTrackMediaItem(track, item)
+        reaper.PCM_Source_Destroy(source)
+        return nil
     end
-    return inserted
+
+    reaper.SetMediaItemInfo_Value(item, "D_POSITION", pos)
+    reaper.SetMediaItemInfo_Value(item, "D_LENGTH",
+        reaper.GetMediaSourceLength(source))
+    return item
 end
 
 -- Move the edit cursor onto `item`'s exact start (from its D_POSITION, never
 -- from the source duration).
+--
+-- SetEditCurPos(time, moveview, seekplay): moveview=false keeps the view and
+-- seekplay=false leaves the play position untouched, so this never seeks,
+-- stops or starts playback. The edit cursor and the play position stay
+-- independent.
 local function setEditCursorToItemStart(item)
     local pos = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
     reaper.SetEditCurPos(pos, false, false)
@@ -537,9 +553,9 @@ local function browseSample(item, direction)
         reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
         setItemMetadata(item, ITEM_META.source, canonicalizePath(newPath))
         -- SetMediaItemTake_Source swaps the take's source, but REAPER keeps
-        -- cached item/peak state. Mark the item dirty so its waveform is
-        -- rebuilt from the new source, refresh the item state, then redraw.
-        reaper.MarkTrackItemsDirty(nil, item)
+        -- cached item/peak state. Mark the item's track dirty so the waveform
+        -- is rebuilt from the new source, refresh the item state, then redraw.
+        reaper.MarkTrackItemsDirty(reaper.GetMediaItem_Track(item), item)
         reaper.UpdateItemInProject(item)
         reaper.UpdateArrange()
     end

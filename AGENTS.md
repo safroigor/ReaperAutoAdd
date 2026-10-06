@@ -173,6 +173,17 @@ See `docs/architecture.md` for extension points.
   the item's `D_POSITION` (never from the source duration, never left at the
   item's end). Alt+click browsing also moves the cursor to the browsed item's
   start.
+- **Never move the transport.** `SetEditCurPos` is always called as
+  `SetEditCurPos(pos, false, false)` (`moveview=false`, `seekplay=false`) so the
+  edit cursor and the play position stay independent — do not seek, stop or
+  start playback.
+- **Insertion must not use `reaper.InsertMedia`.** It inserts at the edit cursor
+  and then moves the edit/play cursor to the end of the inserted item, which
+  disturbs playback. Create the item directly instead (`AddMediaItemToTrack` +
+  `AddTakeToMediaItem` + `PCM_Source_CreateFromFile` + `SetMediaItemTake_Source`).
+- **`MarkTrackItemsDirty` requires a `MediaTrack` as its first argument** (use
+  `reaper.GetMediaItem_Track(item)`); passing `nil` throws and aborts the script,
+  leaving the undo block open.
 - **Browsing must not move the item.** Next/Previous (and Alt+click on an item)
   replace the active take's source in place: same item, same track, exact
   `D_POSITION` preserved, and the new source determines the natural length

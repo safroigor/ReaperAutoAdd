@@ -116,7 +116,7 @@ A thin boundary around `reaper.*`:
 | `showError(message)` | modal error dialog |
 | `getItemMetadata` / `setItemMetadata` / `writeItemMetadata` | item `P_EXT:` string state |
 | `getProjectState` / `setProjectState` | project-scoped string state (`SetProjExtState`) |
-| `insertMediaOnTrack(track, filePath, pos)` | insert via REAPER, pin to `pos`, return the new item |
+| `insertMediaOnTrack(track, filePath, pos)` | create the item + take + PCM source at `pos`, return the new item |
 | `setEditCursorToItemStart(item)` | `SetEditCurPos` to the item's `D_POSITION` |
 | `replaceTakeSource(take, newPath)` | swap the take's source, return its natural length |
 | `seedRandom()` | seed the RNG with time + high-resolution time |
@@ -140,11 +140,17 @@ A thin boundary around `reaper.*`:
 
 ## Insertion details
 
-Insertion uses `reaper.InsertMedia(file, 0)` (`0` = add to current track), so
-REAPER creates the media source and determines its properties — the script never
-decodes audio. The new item(s) are found by diffing the track's item pointers
-before/after the call, then pinned to `D_POSITION = position` (edit cursor for
-the standard action, mouse time for the wrapper).
+Insertion creates the item directly: `AddMediaItemToTrack` +
+`AddTakeToMediaItem` + `PCM_Source_CreateFromFile` + `SetMediaItemTake_Source`,
+then sets `D_POSITION = position` (edit cursor for the standard action, mouse
+time for the wrapper) and `D_LENGTH` from the source length. REAPER still
+creates and owns the media source and determines its properties — the script
+never decodes audio.
+
+The script deliberately does **not** use `reaper.InsertMedia`: it inserts at the
+edit cursor and then moves the edit/play cursor to the end of the inserted item,
+which disturbs playback (and would require moving the item to the mouse position
+for the Alt+click workflow). Direct creation keeps the transport untouched.
 
 The insert **and** the metadata write are wrapped in one undo block:
 
@@ -177,7 +183,7 @@ and `d:/sfx/guns/A.WAV` are treated as the same file.
 local newSource = reaper.PCM_Source_CreateFromFile(newPath)
 reaper.SetMediaItemTake_Source(take, newSource)   -- take now owns newSource
 -- reset D_STARTOFFS/D_PLAYRATE, set D_POSITION/D_LENGTH/metadata
-reaper.MarkTrackItemsDirty(nil, item)             -- rebuild peaks/waveform
+reaper.MarkTrackItemsDirty(reaper.GetMediaItem_Track(item), item) -- rebuild peaks
 reaper.UpdateItemInProject(item)                  -- refresh the item state
 reaper.UpdateArrange()                            -- redraw
 -- the OLD source is intentionally NOT destroyed here (see below)
