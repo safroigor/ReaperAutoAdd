@@ -177,11 +177,18 @@ and `d:/sfx/guns/A.WAV` are treated as the same file.
 local newSource = reaper.PCM_Source_CreateFromFile(newPath)
 local oldSource = reaper.GetMediaItemTake_Source(take)
 reaper.SetMediaItemTake_Source(take, newSource)   -- take now owns newSource
-reaper.PCM_Source_Destroy(oldSource)              -- we own the old source
+-- reset D_STARTOFFS/D_PLAYRATE, set D_POSITION/D_LENGTH/metadata
+reaper.UpdateItemInProject(item)                  -- refresh the item
+reaper.PCM_Source_Destroy(oldSource)              -- free the old source last
 ```
 
 `SetMediaItemTake_Source` does **not** destroy the old source, so the script
-destroys it. To make the new source define the item's natural length, the take's
+frees it — but only **after** `UpdateItemInProject(item)`. That refresh is
+essential: `SetMediaItemTake_Source` swaps the take's source, yet REAPER keeps a
+cached item state used for playback and peaks, so without the refresh the item
+keeps playing the previous source even though `D_LENGTH` was already updated.
+
+To make the new source define the item's natural length, the take's
 `D_STARTOFFS` is reset to 0 and `D_PLAYRATE` to 1, then the item's `D_LENGTH` is
 set to `GetMediaSourceLength(newSource)`. The item's exact `D_POSITION` is
 re-asserted; volume, pan and mute are untouched.

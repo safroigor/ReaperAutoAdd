@@ -184,7 +184,7 @@ and a category track whose library has several files of different lengths.
 | # | Scenario | Action | Expected |
 | --- | --- | --- | --- |
 | A | Empty track lane | Hover empty lane on a `transition` track, Alt+left-click | Random file inserted at the mouse time; edit cursor moves to its start |
-| B | Existing SFX item | Hover an item inserted by this tool, Alt+left-click | Its source becomes the next library file; item count unchanged |
+| B | Existing SFX item | Hover an item inserted by this tool, Alt+left-click | The item **plays and displays** the next library file (the source itself changes, not just the length); item count unchanged |
 | C | Repeated Alt+click | Alt+click the same item several times | Advances one file each click |
 | D | Last sample | Alt+click when the item is the last file | Wraps to the first file |
 | E | **Item position** | Note the item start, Alt+click on it | `D_POSITION` exactly unchanged |
@@ -204,6 +204,11 @@ Additional checks:
 - Alt+clicking an item does **not** require or change the item selection.
 - One Alt+click browse is a **single** undo step; hit-testing/selection adds no
   undo point.
+- **Source-replacement regression:** after browsing, the item's waveform and
+  playback reflect the new file, not just its length. `SetMediaItemTake_Source`
+  alone is not enough — the script must call `reaper.UpdateItemInProject(item)`
+  so REAPER refreshes its cached item state, otherwise the length changes while
+  the old source keeps playing.
 - One-file library → Alt+click leaves the item unchanged (safe no-op).
 - Stored library missing / current source not in library → clear message,
   nothing changed.
