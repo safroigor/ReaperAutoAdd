@@ -5,9 +5,9 @@ effect onto a track, chosen by the track's name, and lets you browse through the
 same library with a mouse gesture.
 
 > **Status: categories, mouse placement and sample browsing implemented.**
-> Five categories (`transition`, `gun`, `impact`, `whoosh`, `footstep`), two
-> insertion workflows (**standard action** and **Alt+click**), and
-> **Next/Previous sample** browsing are available. See
+> Five categories (`transition`, `gun`, `impact`, `whoosh`, `footstep`). The
+> main gesture is **Alt+left-click**: on empty track lane it inserts a random
+> SFX; on an existing SFX item it replaces it with the next sample. See
 > [Current status](#current-status) and the [roadmap](docs/roadmap.md).
 
 ## What it does
@@ -18,11 +18,21 @@ where the sound belongs and press a key or Alt+click. The script looks at the
 track's name, treats it as a **category**, finds that category's folder, picks a
 random supported audio file, and inserts it as a normal REAPER media item.
 
-The mapping is data-driven:
+Random insertion is data-driven:
 
 ```text
 track name  ->  category_folders lookup  ->  configured folder
             ->  random audio file  ->  media item at the position
+```
+
+The same **Alt+left-click** gesture also browses: clicking an existing SFX item
+replaces it with the next sample from the library recorded on that item (no
+selection needed):
+
+```text
+item under mouse  ->  its stored library (P_EXT metadata)
+                  ->  next file (sorted, wraps around)
+                  ->  replace the item's source in place
 ```
 
 Several categories ship out of the box:
@@ -47,9 +57,11 @@ This is an intentionally small, dependency-free project:
 - ✅ Random selection from a configured folder, **avoiding the immediately
   previous file** for that category (no long-term history).
 - ✅ Standard action: selected track + edit cursor, single undo step.
-- ✅ Fast mouse workflow: **Alt+left-click** in the Arrange View inserts at the
-  mouse time on the track under the mouse.
-- ✅ The edit cursor moves to the **start of the inserted item** after insertion.
+- ✅ **Alt+left-click** in the Arrange View: on empty track lane it inserts a
+  random SFX at the mouse time; on an existing SFX item it replaces the item
+  with the **next** sample from that item's stored library (no selection
+  needed).
+- ✅ The edit cursor moves to the **start of the affected item**.
 - ✅ Item-local metadata (`category`, `library`, `source`) via `P_EXT:`.
 - ✅ **Next/Previous Sample** actions replace the selected item's source in
   place, keeping its exact start and using the new source's natural length.
@@ -150,15 +162,35 @@ you added).
 4. A random supported audio file from that category's folder is inserted at the
    cursor. The edit cursor then moves to the **start** of the new item.
 
-### Fast mouse workflow (Alt+click)
+### Alt+left-click (insert and browse) — the main workflow
+
+One gesture, two behaviors depending on what is under the mouse.
+
+**Over empty track lane — insert a random SFX:**
 
 1. Move the mouse over the target track at the exact time you want the sound.
 2. **Alt+left-click.**
 
-The script resolves the track under the mouse and the project time under the
-mouse (from the mouse's X position), picks a random file for that track's
-category, and inserts it there. The edit cursor then moves to the new item's
-start.
+A random file for that track's category is inserted at the mouse time, and the
+edit cursor moves to the new item's start.
+
+**Over an existing SFX item — browse to the next sample:**
+
+1. Move the mouse over the item (no need to select it).
+2. **Alt+left-click.**
+
+The item's source is replaced in place with the **next** file from its stored
+library; the item is not moved and no new item is created. Repeated Alt+clicks
+advance through the library and wrap from the last file back to the first. The
+edit cursor moves to the item's start.
+
+```text
+gun_04.wav  --Alt+click-->  gun_05.wav  --Alt+click-->  gun_06.wav  ...
+gun_09.wav  --Alt+click-->  gun_01.wav   (wraps)
+```
+
+Only items that carry SFX metadata (inserted by this tool) are browsed. Clicking
+a plain, non-SFX media item shows a clear message and changes nothing.
 
 One-time mouse-modifier setup (required), in
 **Preferences → Editing Behavior → Mouse Modifiers**:
@@ -170,40 +202,43 @@ One-time mouse-modifier setup (required), in
 
 Both contexts are required because REAPER hit-tests left clicks differently:
 empty track lane uses the **Track** context, while a click over a media item
-uses the **Media item** context. Assigning the same action to both makes
-Alt+click behave identically in either case.
+uses the **Media item** context. The same script handles both; it decides what
+to do from the item actually under the mouse, not from the selection.
 
-Selecting the track under the mouse is part of this workflow (the importer
-inserts on the current track). That selection change is intentional and is not
-an undo step.
+For random insertion, the track under the mouse is selected (the importer
+inserts on the current track); that selection change is intentional and is not
+an undo step. Browsing does not require or change the selection.
 
-### Sample browsing (Next / Previous Sample)
+### Sample browsing
 
-After inserting an SFX, you can step through the same library without opening a
-browser:
+The recommended way to browse forward is **Alt+left-click on the item** (see
+above) — no selection needed. The two Actions remain available and operate on
+the **selected** item:
 
-1. Select an inserted SFX item (or use the mouse-wheel setup below, which
-   selects the item under the mouse).
+1. Select an inserted SFX item.
 2. Run `SFX: Next Sample` or `SFX: Previous Sample`.
 
-The item is **not** moved and **no new item is created**: the existing item's
-media source is replaced in place. Its exact start position is preserved and
-the new source determines the item's **natural length** (the previous length is
-not kept, and the new source is not time-stretched). Next wraps from the last
-file to the first; Previous wraps from the first to the last. The item's
-metadata is updated so further browsing stays in the same library.
+Both the Alt+click gesture and the Actions use the same logic: the item is
+**not** moved and **no new item is created** — the existing item's media source
+is replaced in place. Its exact start position is preserved and the new source
+determines the item's **natural length** (the previous length is not kept, and
+the new source is not time-stretched). Next wraps from the last file to the
+first; Previous wraps from the first to the last. The item's metadata is updated
+so further browsing stays in the same library.
 
-If the selected item has no SFX metadata, the library cannot be resolved, or
-the current source is not found in the library, nothing is changed and a clear
-message is shown. A one-file library is a safe no-op.
+If the item has no SFX metadata, the library cannot be resolved, or the current
+source is not found in the library, nothing is changed and a clear message is
+shown. A one-file library is a safe no-op.
 
-#### Recommended Alt + mouse-wheel setup
+#### Optional: Alt + mouse-wheel browsing
 
-REAPER has **no "Media item → mouse wheel" mouse-modifier context**. Mouse wheel
-is assigned as a **shortcut in the Action List** (select the action, click
-**Add**, then hold **Alt** and scroll the wheel). REAPER sends the wheel as a
-relative value, so a plain action fires for both scroll directions; to make the
-direction matter, build a tiny custom action:
+The Alt+click workflow above is the primary way to browse. If you also want a
+wheel gesture, note that REAPER has **no "Media item → mouse wheel"
+mouse-modifier context**; mouse wheel is assigned as a **shortcut in the Action
+List** (select the action, click **Add**, then hold **Alt** and scroll the
+wheel). REAPER sends the wheel as a relative value, so a plain action fires for
+both scroll directions; to make the direction matter, build a tiny custom
+action:
 
 **New action → New custom action…**, name it e.g. `SFX: Browse Sample
 (Alt+Wheel)`, and add these actions in order:
@@ -232,9 +267,10 @@ if CC` to find them.)
 then bind `Alt+Mousewheel` to `SFX: Next Sample` and e.g.
 `Alt+Shift+Mousewheel` to `SFX: Previous Sample` in the Action List.
 
-Because the browsing actions operate on the **selected** item, the
-mouse-wheel custom action above selects the item under the mouse first. Making
-the script itself resolve the item under the mouse is a future enhancement.
+The `SFX: Next Sample` / `SFX: Previous Sample` Actions operate on the
+**selected** item, so the wheel custom action above selects the item under the
+mouse first. The **Alt+left-click** workflow does not need this: it targets the
+item under the mouse directly.
 
 ### Notes
 
@@ -246,13 +282,13 @@ Errors you may see:
 | Situation | Message |
 | --- | --- |
 | No track selected (standard action) | "No track selected." |
-| No track under the mouse (Alt+click) | "No track under the mouse." |
+| No track under the mouse (Alt+click on empty lane) | "No track under the mouse." |
 | Track isn't a known category | "Selected track is not a supported category." |
 | Folder doesn't exist | "The <category> folder does not exist: …" |
 | Folder has no supported audio | "No supported audio files found …" |
 | Insertion failed | "Failed to insert the selected file: …" |
-| No item selected (browsing) | "No media item selected." |
-| Item has no SFX metadata | "The selected item has no SFX library metadata." |
+| No item selected (Next/Previous Action) | "No media item selected." |
+| Item has no SFX metadata (Alt+click on a plain item, or Next/Previous on one) | "This item has no SFX library metadata." |
 | Stored library empty/missing | "No supported audio files found in the stored library: …" |
 | Current source not in library | "The item's source is not in its stored library …" |
 
@@ -267,16 +303,20 @@ Each inserted item stores, in REAPER's native item extension state (`P_EXT:`):
 | `sfx_source` | `D:/SFX/Guns/gun_04.wav` |
 
 This is **item-local** state, so an existing SFX item still knows its library
-even if the track is renamed. Next/Previous Sample uses this metadata rather
-than the current track name. Paths are stored in a canonical form (forward
-slashes, no trailing slash) and compared case-insensitively.
+even if the track is renamed. Both **Alt+left-click browsing** and the
+Next/Previous Sample Actions use this metadata rather than the current track
+name. Paths are stored in a canonical form (forward slashes, no trailing slash)
+and compared case-insensitively.
 
 ## Edit cursor behaviour
 
-After a successful insertion (either workflow) the edit cursor is set to the
-inserted item's exact `D_POSITION` — the start of the new item. It is never
-derived from the source duration and never left at the item's end. Next/Previous
-Sample does not move the edit cursor (it only replaces the source).
+- **Random insertion** (standard action, or Alt+click on empty track lane): the
+  edit cursor is set to the new item's exact `D_POSITION` (its start), never
+  derived from the source duration and never left at the item's end.
+- **Alt+click on an existing SFX item**: the edit cursor is set to that item's
+  start.
+- The **Next/Previous Sample Actions** do not move the edit cursor (they only
+  replace the source).
 
 ## Immediate-repeat prevention
 
@@ -305,10 +345,11 @@ Deliberately **not** implemented yet:
   avoidance).
 - No GUI / settings dialog.
 - No transient detection, no snap-to-transient.
-- Next/Previous operate on the **selected** item; the recommended mouse-wheel
-  setup selects the item under the mouse as a separate step.
-- REAPER has no media-item mouse-wheel mouse-modifier context; the Alt+wheel
-  setup is Action-List based (see above).
+- The **Next/Previous Sample Actions** operate on the **selected** item. The
+  Alt+left-click gesture targets the item under the mouse and needs no
+  selection.
+- REAPER has no media-item mouse-wheel mouse-modifier context; the optional
+  Alt+wheel setup is Action-List based (see above).
 - The Alt+click workflow covers the **Track** and **Media item** contexts only.
   Alt+click on some item sub-contexts (item edge, fade/autocrossfade, and
   "Media item bottom half" if enabled) may use a different REAPER mouse context

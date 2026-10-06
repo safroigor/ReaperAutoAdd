@@ -7,16 +7,21 @@
 
   What it does
   ------------
-  Inserts a random SFX from the folder of the track UNDER THE MOUSE, at the
-  project time UNDER THE MOUSE in the Arrange View. The item is placed at the
-  mouse time and the edit cursor then moves to that item's start.
+  One Alt+left-click gesture, two behaviors depending on what is under the
+  mouse in the Arrange View:
 
-      mouse position
-           |
-  transition -------*------------   Alt+left-click
-                    |                |
-                    v                v
-             random transition -> [SFX] inserted at the mouse time
+    * Empty track lane -> insert a random SFX for that track's category at the
+      mouse time, and move the edit cursor to the new item's start.
+    * An existing media item -> replace that item's source with the NEXT file
+      from its stored SFX library, keeping its exact start position and moving
+      the edit cursor to it. No selection is required: the target is the item
+      under the mouse.
+
+      mouse over empty lane            mouse over an SFX item
+             |                                |
+        Alt+left-click                   Alt+left-click
+             v                                v
+      insert random SFX              replace with next sample
 
   Required setup (one-time, per REAPER install)
   ---------------------------------------------
@@ -90,14 +95,28 @@ local function main()
         return showError("Could not load " .. MODULE_FILENAME .. ":\n"
             .. tostring(err))
     end
-    if type(sfx.insertRandomForTrackAtPosition) ~= "function" then
+    if type(sfx.insertRandomForTrackAtPosition) ~= "function"
+        or type(sfx.browseSample) ~= "function" then
         return showError(MODULE_FILENAME .. " does not expose the shared "
-            .. "insertion function.\n\nMake sure both scripts are the same "
-            .. "version and live in the same folder.")
+            .. "functions.\n\nMake sure both scripts are the same version "
+            .. "and live in the same folder.")
     end
 
     -- Where is the mouse?
     local x, y = reaper.GetMousePosition()
+
+    -- Is there a media item under the mouse? If so, Alt+click browses to the
+    -- NEXT sample from that item's stored library. Native hit-test; item
+    -- selection is not involved. allow_locked=true so locked items count.
+    local item = reaper.GetItemFromPoint(x, y, true)
+    if item then
+        if sfx.browseSample(item, sfx.BROWSE_NEXT) then
+            sfx.setEditCursorToItemStart(item)
+        end
+        return
+    end
+
+    -- Otherwise the mouse is over empty track lane: insert a random SFX.
 
     -- Which track is under the mouse?
     local track = reaper.GetTrackFromPoint(x, y)

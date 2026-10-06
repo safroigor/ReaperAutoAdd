@@ -11,28 +11,37 @@ Four scripts; all shared logic lives in the core:
 | Script | Role |
 | --- | --- |
 | `scripts/InsertRandomSFX.lua` | **Core module** + standard action. Holds `CONFIG`, pure helpers, REAPER helpers and the two shared operations. |
-| `scripts/InsertRandomSFXAtMouse.lua` | Wrapper: resolves track + time from the mouse, then inserts. |
-| `scripts/NextSample.lua` | Wrapper: calls `browseSample(BROWSE_NEXT)`. |
-| `scripts/PreviousSample.lua` | Wrapper: calls `browseSample(BROWSE_PREVIOUS)`. |
+| `scripts/InsertRandomSFXAtMouse.lua` | Wrapper: Alt+click. If an item is under the mouse → `browseSample(item, BROWSE_NEXT)`; otherwise → insert at the mouse time. |
+| `scripts/NextSample.lua` | Wrapper: `browseSelectedSample(BROWSE_NEXT)`. |
+| `scripts/PreviousSample.lua` | Wrapper: `browseSelectedSample(BROWSE_PREVIOUS)`. |
 
 The wrappers contain no category/folder/undo logic. Each loads the core with
 `loadfile`, setting `_G.SFX_LOAD_AS_MODULE` so the core returns its functions
 instead of running `main()`. **All four files must stay in the same directory.**
 
 ```text
-  InsertRandomSFX.lua            InsertRandomSFXAtMouse.lua     NextSample.lua / PreviousSample.lua
-  (standard action)              (Alt+click)                    (sample browsing)
-    selected track                 track under mouse               selected media item
-    + GetCursorPosition()          + GetSet_ArrangeView2(mouse x)  + item metadata (library, source)
-            \                              /                                |
-             v                            v                                 |
-      insertRandomForTrackAtPosition(track, position)          browseSample(direction)
-             │                            │                                 │
-             ▼                            ▼                                 ▼
-      category -> folder -> files -> random pick -> insert     library -> sorted files -> step -> replace source
-             │                                                              │
-             ▼                                                              ▼
-      item metadata + project state + edit cursor to item start     item metadata update (source)
+  Entry point                              Shared operation
+  -----------                              ----------------
+  InsertRandomSFX.lua (standard action,
+    selected track + GetCursorPosition) --> insertRandomForTrackAtPosition(track, position)
+
+  InsertRandomSFXAtMouse.lua (Alt+click)
+    + GetMousePosition
+    + GetItemFromPoint(mouse)
+      item under mouse?  yes ------------> browseSample(item, BROWSE_NEXT)
+                         no -------------> insertRandomForTrackAtPosition(track, position)
+                                          (track from GetTrackFromPoint,
+                                           position from GetSet_ArrangeView2)
+
+  NextSample.lua      (selected item) ---> browseSelectedSample(BROWSE_NEXT)
+  PreviousSample.lua  (selected item) ---> browseSelectedSample(BROWSE_PREVIOUS)
+
+  insertRandomForTrackAtPosition:
+      category -> folder -> files -> random pick -> insert
+      -> item metadata + project state + cursor to item start
+  browseSample(item, direction):
+      item metadata -> library -> files -> step -> replace source
+      -> item metadata update
 ```
 
 ## Core code layers
@@ -118,10 +127,13 @@ A thin boundary around `reaper.*`:
   → files → random pick (avoiding the immediate previous pick) → insert →
   write metadata → remember pick → move edit cursor to item start. One undo
   step (insert + metadata).
-- `browseSample(direction)` — read the selected item's metadata → resolve the
-  library → find the current source → step (wrap-around) → replace the take
-  source → keep exact position → set natural length → update metadata. One undo
-  step.
+- `browseSample(item, direction)` — read `item`'s metadata → resolve the library
+  → find the current source → step (wrap-around) → replace the take source →
+  keep exact position → set natural length → update metadata. One undo step.
+  The target item is passed in explicitly, so the same logic serves the item
+  under the mouse and the selected item.
+- `browseSelectedSample(direction)` — resolves the selected item and calls
+  `browseSample`. Used by the Next/Previous wrappers.
 
 `main()` (standard action) validates that a track is selected and calls
 `insertRandomForTrackAtPosition(track, reaper.GetCursorPosition())`.
@@ -159,7 +171,7 @@ and `d:/sfx/guns/A.WAV` are treated as the same file.
 
 ## Source replacement details
 
-`browseSample` replaces the active take's source:
+`browseSample(item, direction)` replaces the active take's source:
 
 ```lua
 local newSource = reaper.PCM_Source_CreateFromFile(newPath)
@@ -183,7 +195,6 @@ re-asserted; volume, pan and mute are untouched.
 | Config file instead of inline table | replace the literal `CONFIG` table |
 | Long-term history / weighting | the selection step in `insertRandomForTrackAtPosition`; add a pure helper |
 | Recursive subfolders | `collectSupportedAudioFiles` |
-| Item-under-mouse browsing | resolve the item in `browseSample` (or a wrapper) instead of the selected item |
 | Random gain/pitch/pan | a new step after `insertMediaOnTrack` |
 | Additional mouse contexts (item edge/fade, bottom half) | REAPER-side wiring only |
 | Different formats | `CONFIG.supported_extensions` |

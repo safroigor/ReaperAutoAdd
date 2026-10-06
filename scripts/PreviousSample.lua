@@ -67,13 +67,13 @@ local function main()
         return showError("Could not load " .. MODULE_FILENAME .. ":\n"
             .. tostring(err))
     end
-    if type(sfx.browseSample) ~= "function" then
-        return showError(MODULE_FILENAME .. " does not expose browseSample.\n\n"
+    if type(sfx.browseSelectedSample) ~= "function" then
+        return showError(MODULE_FILENAME .. " does not expose browseSelectedSample.\n\n"
             .. "Make sure both scripts are the same version and live in the "
             .. "same folder.")
     end
 
-    sfx.browseSample(sfx.BROWSE_PREVIOUS)
+    sfx.browseSelectedSample(sfx.BROWSE_PREVIOUS)
 end
 
 main()

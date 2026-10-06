@@ -58,24 +58,27 @@ gesture.
 
 Implemented:
 
-- **Alt+left-click** in the Arrange View inserts a random SFX at the mouse time
-  on the track under the mouse. Uses only native APIs: `GetMousePosition`,
-  `GetTrackFromPoint`, `GetSetArrangeView2` (mouse X → project time),
+- **Alt+left-click** in the Arrange View, one gesture with two behaviors:
+  * over empty track lane → insert a random SFX at the mouse time on the track
+    under the mouse;
+  * over an existing SFX item → replace that item with the next sample from its
+    stored library (target = item under the mouse, no selection needed).
+  Uses only native APIs: `GetMousePosition`, `GetItemFromPoint`,
+  `GetTrackFromPoint`, `GetSet_ArrangeView2` (mouse X → project time),
   `SetOnlyTrackSelected`.
-- **Alt+mouse-wheel** browsing replaces the selected item's source with the
-  next/previous file in its library (`SFX: Next Sample` /
-  `SFX: Previous Sample`). REAPER has no media-item wheel context, so this is an
-  Action-List shortcut / custom action.
+- **Next / Previous Sample** actions (selected item) remain available; an
+  optional Alt+mouse-wheel setup can drive them.
 - Implemented as thin wrappers that call the shared core, so the standard action
   is untouched.
-- After insertion the edit cursor moves to the inserted item's start.
+- After insertion or browsing the edit cursor moves to the affected item's
+  start.
 
 Still open:
 
 - Additional mouse contexts: item edge, fade/autocrossfade, "Media item bottom
   half" (only if a real workflow needs them).
-- Resolve the item under the mouse inside the script (today the recommended
-  wheel setup selects it via a separate action).
+- Optionally let the wheel / Next / Previous actions resolve the item under the
+  mouse too.
 - Investigate whether a single context could cover the whole arrange view.
 
 ## Phase 4 — Production workflow 🚧 (metadata + browsing done)

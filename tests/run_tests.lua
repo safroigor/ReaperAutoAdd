@@ -333,7 +333,12 @@ check("PROJ_STATE_SECTION is set",
 -- are therefore only exercised manually inside REAPER.
 check("module exports insertRandomForTrackAtPosition",
     type(Sfx.insertRandomForTrackAtPosition) == "function")
+-- browseSample now takes an explicit target item: (item, direction). The
+-- selected-item wrapper and the item-under-mouse wrapper both call it.
 check("module exports browseSample", type(Sfx.browseSample) == "function")
+check("module exports browseSelectedSample", type(Sfx.browseSelectedSample) == "function")
+check("module exports setEditCursorToItemStart",
+    type(Sfx.setEditCursorToItemStart) == "function")
 
 -- ---------------------------------------------------------------------
 -- Summary

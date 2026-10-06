@@ -39,8 +39,8 @@ All shared logic lives in
 [`scripts/InsertRandomSFX.lua`](scripts/InsertRandomSFX.lua) (core module +
 standard action). Three thin wrappers call it.
 
-**Insertion** — standard action, and
-[`InsertRandomSFXAtMouse.lua`](scripts/InsertRandomSFXAtMouse.lua) for Alt+click:
+**Insertion** — standard action, and Alt+click on **empty track lane** via
+[`InsertRandomSFXAtMouse.lua`](scripts/InsertRandomSFXAtMouse.lua):
 
 1. Requires a selected track (standard) or a track under the mouse (Alt+click).
 2. Resolves the track's name to a category, case-insensitively. Five categories
@@ -57,15 +57,24 @@ standard action). Three thin wrappers call it.
 8. Wraps insert + metadata in a single REAPER undo step
    (`Insert Random <Category>`, e.g. `Insert Random Gun`).
 
-**Sample browsing** — [`NextSample.lua`](scripts/NextSample.lua) /
+**Sample browsing** — Alt+click on an **existing SFX item** via
+`InsertRandomSFXAtMouse.lua`, or the selected item via
+[`NextSample.lua`](scripts/NextSample.lua) /
 [`PreviousSample.lua`](scripts/PreviousSample.lua):
 
-1. Reads the selected item's `library` / `source` metadata.
-2. Steps to the next/previous file in that library (sorted, wrap-around).
-3. Replaces the item's media source in place — no new item, same track, exact
+1. `browseSample(item, direction)` takes the target item **explicitly**, so it
+   serves both the item under the mouse (no selection needed) and the selected
+   item.
+2. Reads the item's `library` / `source` metadata.
+3. Steps to the next/previous file in that library (sorted, wrap-around).
+4. Replaces the item's media source in place — no new item, same track, exact
    start preserved, and the new source determines the item's natural length (no
    time-stretch, old length not kept).
-4. Updates the `source` metadata. Single undo step.
+5. Updates the `source` metadata. Single undo step.
+
+The Alt+click wrapper decides between insertion and browsing from the item
+under the mouse (`GetItemFromPoint`): item present → browse next; no item →
+insert random. It never relies on the selection for browsing.
 
 Supported formats: `.wav`, `.aif`, `.aiff`, `.flac`, `.ogg`, `.mp3`.
 
@@ -77,18 +86,22 @@ without being asked.
 Two shared operations, called by thin wrappers:
 
 ```text
-  standard action        Alt+click wrapper         Next/Previous wrappers
-  selected track         track + time under mouse  selected media item
-  + edit cursor          + GetSet_ArrangeView2     + item metadata
-        \                       /                          │
-         v                     v                           v
-  insertRandomForTrackAtPosition(track, position)   browseSample(direction)
-        │                                                    │
-        ▼                                                    ▼
-  category -> folder -> files -> random pick -> insert   library -> files -> step -> replace source
-        │                                                    │
-        ▼                                                    ▼
-  item metadata + project state + cursor to item start   item metadata update
+  Entry point                              Shared operation
+  -----------                              ----------------
+  standard action (selected track
+    + edit cursor)  ---------------------> insertRandomForTrackAtPosition(track, position)
+  Alt+click, no item under mouse
+    (empty track lane) ------------------> insertRandomForTrackAtPosition(track, position)
+  Alt+click, item under mouse  ---------> browseSample(item, BROWSE_NEXT)
+  NextSample.lua (selected item) -------> browseSample(item, BROWSE_NEXT)
+  PreviousSample.lua (selected item) ---> browseSample(item, BROWSE_PREVIOUS)
+
+  insertRandomForTrackAtPosition:
+      category -> folder -> files -> random pick -> insert
+      -> item metadata + project state + cursor to item start
+  browseSample:
+      item metadata -> library -> files -> step -> replace source
+      -> item metadata update
 ```
 
 Key rule: **the code must not be hard-coded around any single category.** Each
@@ -158,11 +171,14 @@ See `docs/architecture.md` for extension points.
   Do **not** show a modal dialog on the successful path.
 - **Insertion moves the edit cursor to the inserted item's start**, read from
   the item's `D_POSITION` (never from the source duration, never left at the
-  item's end). This applies to both the standard and Alt+click workflows.
-- **Browsing must not move the item.** Next/Previous replace the active take's
-  source in place: same item, same track, exact `D_POSITION` preserved, and the
-  new source determines the natural length (`D_LENGTH`); do not keep the old
-  length or time-stretch.
+  item's end). Alt+click browsing also moves the cursor to the browsed item's
+  start.
+- **Browsing must not move the item.** Next/Previous (and Alt+click on an item)
+  replace the active take's source in place: same item, same track, exact
+  `D_POSITION` preserved, and the new source determines the natural length
+  (`D_LENGTH`); do not keep the old length or time-stretch.
+- **The Alt+click browse target is the item under the mouse**, resolved with
+  `GetItemFromPoint`; never fall back to the selected item for that gesture.
 - **Item metadata is item-local** (`P_EXT:` keys `sfx_category`, `sfx_library`,
   `sfx_source`). Browsing must use the stored library, never the current track
   name. Canonicalize paths before storing/comparing.
@@ -172,7 +188,9 @@ See `docs/architecture.md` for extension points.
 - **Do not break existing workflows.** The contract:
   * standard action — select a category track, position the cursor, run once,
     get one item at the cursor;
-  * Alt+click — hover a track/time in the Arrange View, get one item there;
+  * Alt+click on empty track lane — insert one item at the mouse time;
+  * Alt+click on an item — replace that item with the next sample from its
+    stored library (target = item under the mouse, never the selection);
   * Next/Previous — replace the selected item's source in place.
   Each operation is a single undo step.
 - Match the surrounding style: 4-space indent, `local function` declarations,
@@ -227,8 +245,6 @@ explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
 - **Additional mouse contexts** — item edge / fade / "Media item bottom half"
   bindings, only if a real workflow needs them. (Alt+left-click on the Track and
   Media item contexts is already implemented — Phase 3.)
-- **Item-under-mouse browsing** — resolve the item under the mouse inside the
-  script instead of requiring it to be selected first.
 - **Transient / peak detection** — optionally snap an inserted item to a nearby
   transient.
 - **Randomisation improvements** — optional history and weighted selection.

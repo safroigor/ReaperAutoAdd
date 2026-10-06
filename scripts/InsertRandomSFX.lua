@@ -470,45 +470,50 @@ local function insertRandomForTrackAtPosition(track, position)
 end
 
 -- =====================================================================
--- SAMPLE BROWSING (shared by NextSample.lua / PreviousSample.lua)
+-- SAMPLE BROWSING
 -- =====================================================================
 
--- Replace the selected item's source with the next/previous file from the
--- library recorded in its metadata. `direction` is BROWSE_NEXT or
--- BROWSE_PREVIOUS. Keeps the item, its track and its exact start position;
--- the new source determines the natural length. One undo step. Errors are
--- reported to the user.
-local function browseSample(direction)
-    -- 1. There must be a selected item carrying our metadata.
-    local item = getSelectedMediaItemOrNil()
+-- Replace `item`'s source with the next/previous file from the library
+-- recorded in its metadata. `direction` is BROWSE_NEXT or BROWSE_PREVIOUS.
+-- Keeps the item, its track and its exact start position; the new source
+-- determines the natural length. One undo step.
+--
+-- The target item is passed in explicitly, so the same logic serves the
+-- selected item (NextSample.lua / PreviousSample.lua) and the item under the
+-- mouse (InsertRandomSFXAtMouse.lua) without depending on selection state.
+-- Returns true on success (including the one-file no-op), false on error.
+local function browseSample(item, direction)
     if not item then
-        return showError("No media item selected.\n\n"
-            .. "Select an SFX item inserted by this tool, then try again.")
+        return false
     end
 
+    -- The item must carry our metadata.
     local library = getItemMetadata(item, ITEM_META.library)
     local source = getItemMetadata(item, ITEM_META.source)
     if library == "" or source == "" then
-        return showError("The selected item has no SFX library metadata.\n\n"
+        showError("This item has no SFX library metadata.\n\n"
             .. "Insert it with 'SFX: Insert Random SFX' first.")
+        return false
     end
 
-    -- 2. The recorded library must still contain supported audio files.
+    -- The recorded library must still contain supported audio files.
     local files = collectSupportedAudioFiles(library)
     if #files == 0 then
-        return showError(string.format(
+        showError(string.format(
             "No supported audio files found in the stored library:\n%s",
             library))
+        return false
     end
 
-    -- 3. The item's current source must be findable, otherwise refuse to make
-    -- an arbitrary destructive change.
+    -- The item's current source must be findable, otherwise refuse to make an
+    -- arbitrary destructive change.
     local index = findPathIndex(files, source)
     if not index then
-        return showError(string.format(
+        showError(string.format(
             "The item's source is not in its stored library, so nothing was "
             .. "changed.\n\nSource:\n%s\n\nLibrary:\n%s",
             source, library))
+        return false
     end
 
     if #files == 1 then
@@ -517,7 +522,8 @@ local function browseSample(direction)
 
     local take = reaper.GetActiveTake(item)
     if not take then
-        return showError("The selected item has no active take.")
+        showError("This item has no active take.")
+        return false
     end
 
     local newIndex = browseIndex(index, #files, direction)
@@ -537,9 +543,22 @@ local function browseSample(direction)
     reaper.Undo_EndBlock(description, -1)
 
     if not ok then
-        return showError("Failed to replace the source:\n" .. newPath)
+        showError("Failed to replace the source:\n" .. newPath)
+        return false
     end
     return true
+end
+
+-- Browse the currently selected item. Used by NextSample.lua /
+-- PreviousSample.lua. Returns true on success, false on error.
+local function browseSelectedSample(direction)
+    local item = getSelectedMediaItemOrNil()
+    if not item then
+        showError("No media item selected.\n\n"
+            .. "Select an SFX item inserted by this tool, then try again.")
+        return false
+    end
+    return browseSample(item, direction)
 end
 
 -- =====================================================================
@@ -592,4 +611,6 @@ return {
     configuredCategories = configuredCategories,
     insertRandomForTrackAtPosition = insertRandomForTrackAtPosition,
     browseSample = browseSample,
+    browseSelectedSample = browseSelectedSample,
+    setEditCursorToItemStart = setEditCursorToItemStart,
 }

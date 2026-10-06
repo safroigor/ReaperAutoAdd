@@ -97,12 +97,16 @@ of executing `main()`. Coverage includes:
 - folder-existence detection;
 - **immediate-repeat avoidance** (`chooseRandomIndex`);
 - **browse stepping** with wrap-around and safe handling of an unknown/one-file
-  library (`findPathIndex` + `browseIndex`);
-- stored-state identifiers and the exported shared functions.
+  library (`findPathIndex` + `browseIndex`), i.e. the same composition
+  `browseSample(item, direction)` performs;
+- stored-state identifiers and the exported shared functions
+  (`insertRandomForTrackAtPosition`, `browseSample`, `browseSelectedSample`,
+  `setEditCursorToItemStart`).
 
 The REAPER APIs (insertion, edit cursor, `P_EXT:` metadata, `SetProjExtState`,
-source replacement) cannot be unit-tested outside REAPER — they are covered by
-the manual test cases below. Also run the syntax gate on every script:
+source replacement) and the item-under-mouse hit-test (`GetItemFromPoint`)
+cannot be unit-tested outside REAPER — they are covered by the manual test cases
+below. Also run the syntax gate on every script:
 
 ```sh
 luac -p scripts/InsertRandomSFX.lua
@@ -166,29 +170,43 @@ selected item inserted by this tool.
 | B7 | **Metadata updated** | Browse, inspect `.RPP` | `sfx_source` reflects the new file; `sfx_library` unchanged |
 | B8 | Undo | Browse, then `Ctrl+Z` once | One step restores the previous source |
 | B9 | No item selected | Deselect all items, run Next/Previous | "No media item selected." dialog; nothing changed |
-| B10 | No metadata | Select a plain audio item, run Next | "no SFX library metadata" dialog; nothing changed |
+| B10 | No metadata | Select a plain audio item, run Next | "This item has no SFX library metadata." dialog; nothing changed |
 | B11 | One-file library | Browse an item whose library has one file | No change, no error |
 | B12 | Source not found | Remove the current source file, run Next | Clear message; nothing changed |
 | B13 | **Item/track preserved** | Browse | Same item, same track, no new item, volume/pan/mute unchanged |
 | B14 | Alt+wheel | Use the custom action (or Alt+wheel binding) over an item | Wheel up = Next, wheel down = Previous |
 
-## Manual test cases — Alt+click insertion
+## Manual test cases — Alt+click (insert and browse)
+
+Requires the two mouse-modifier bindings (Track + Media item, Alt+left-click)
+and a category track whose library has several files of different lengths.
 
 | # | Scenario | Action | Expected |
 | --- | --- | --- | --- |
-| A | Empty track lane | Hover empty lane on a `transition` track, Alt+left-click | Random file inserted at the mouse time |
-| B | Existing media item | Hover an item, Alt+left-click | Random file inserted at the mouse time on that track |
-| C | **Edit cursor** | Note the cursor, Alt+click | Cursor moves to the new item's **start** |
-| D | Multiple tracks | Select track A, Alt+click track B | Uses track B's category and lands on B |
-| E | Zoom / scroll | Repeat at several zoom/scroll positions | Insert time matches the mouse X |
-| F | Undo | Alt+click, then `Ctrl+Z` | One undo removes the item |
-| G | Standard action regression | Run the standard action | Behaves as before |
+| A | Empty track lane | Hover empty lane on a `transition` track, Alt+left-click | Random file inserted at the mouse time; edit cursor moves to its start |
+| B | Existing SFX item | Hover an item inserted by this tool, Alt+left-click | Its source becomes the next library file; item count unchanged |
+| C | Repeated Alt+click | Alt+click the same item several times | Advances one file each click |
+| D | Last sample | Alt+click when the item is the last file | Wraps to the first file |
+| E | **Item position** | Note the item start, Alt+click on it | `D_POSITION` exactly unchanged |
+| F | **Item length** | Alt+click to a longer/shorter file | Item length becomes the new source's natural length (not the old one, not truncated) |
+| G | **Edit cursor** | Note the cursor, Alt+click an item | Cursor ends at the item's start |
+| H | Undo | Alt+click an item, then `Ctrl+Z` once | One step restores the previous sample |
+| I | **Non-SFX item** | Alt+click a plain audio item with no metadata | "no SFX library metadata" dialog; source NOT replaced |
+| J | **Independent targets** | Select item X, then Alt+click item Y | Y is browsed (item under mouse); X untouched |
+| K | Multiple tracks | Select track A, Alt+click empty lane on track B | Uses track B's category and lands on B |
+| L | Zoom / scroll | Repeat A at several zoom/scroll positions | Insert time matches the mouse X |
+| M | Standard action regression | Run the standard action | Behaves as before |
 
 Additional checks:
 
 - Alt+click over a non-category track → "not a supported category" dialog.
 - Alt+click below the last track → "No track under the mouse." dialog.
-- Selecting the track under the mouse does **not** create its own undo step.
+- Alt+clicking an item does **not** require or change the item selection.
+- One Alt+click browse is a **single** undo step; hit-testing/selection adds no
+  undo point.
+- One-file library → Alt+click leaves the item unchanged (safe no-op).
+- Stored library missing / current source not in library → clear message,
+  nothing changed.
 - Known gap: Alt+click on an item **edge** or **fade** may not fire (separate
   REAPER context). Expected for now.
 
