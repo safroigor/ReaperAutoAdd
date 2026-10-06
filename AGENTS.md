@@ -28,18 +28,19 @@ track named "impact"      ->  random file from the "Impacts" folder
 
 The eventual UX may be invoked with a keyboard shortcut, a toolbar button, or a
 mouse modifier (Ctrl-click, Shift-click, ...) on a track. That interaction layer
-is **not** part of the current MVP.
+is **not** part of the current scope.
 
 The value of the project is speed: keep the mouse on the timeline, press one
 key, get a suitable sound at the cursor.
 
-## 2. Current MVP
+## 2. Current implementation
 
 Implemented today, in [`scripts/InsertRandomSFX.lua`](scripts/InsertRandomSFX.lua):
 
 1. Requires a selected track (errors otherwise).
 2. Resolves the selected track's name to a category, case-insensitively.
-   The only configured category is `transition`.
+   Five categories are configured by default: `transition`, `gun`, `impact`,
+   `whoosh`, `footstep`.
 3. Looks in the folder configured for that category.
 4. Lists the supported audio files directly inside that folder
    (subfolders are ignored).
@@ -47,7 +48,7 @@ Implemented today, in [`scripts/InsertRandomSFX.lua`](scripts/InsertRandomSFX.lu
 6. Inserts it as a normal media item at the current edit cursor position on the
    selected track.
 7. Wraps the insertion in a single REAPER undo step
-   (`Insert Random Transition`).
+   (`Insert Random <Category>`, e.g. `Insert Random Gun`).
 
 Supported formats: `.wav`, `.aif`, `.aiff`, `.flac`, `.ogg`, `.mp3`.
 
@@ -80,9 +81,9 @@ The intended pipeline is:
        Media Item
 ```
 
-Key rule: **the code must not be hard-coded around `transition`.** The only
-transition-specific thing is a single row in the `CONFIG.category_folders`
-table. Adding a category is a configuration change, not a logic change.
+Key rule: **the code must not be hard-coded around any single category.** Each
+category is just a row in the `CONFIG.category_folders` table. Adding a category
+is a configuration change, not a logic change.
 
 The script is organised into three layers so future growth stays cheap:
 
@@ -119,7 +120,8 @@ See `docs/architecture.md` for extension points.
 
 ## 5. Coding rules
 
-- Keep scripts **small and readable**. The MVP is one file on purpose.
+- Keep scripts **small and readable**. The implementation is one file on
+  purpose.
 - **Avoid unnecessary abstraction.** Add a function when it isolates something
   real (an API call, an error path, a future extension point), not for symmetry.
 - **Isolate REAPER API interaction** in the "REAPER API HELPERS" section.
@@ -133,9 +135,9 @@ See `docs/architecture.md` for extension points.
   human-readable description, and must be a single undo step.
 - **Do not silently fail.** Show a clear REAPER message on every error path.
   Do **not** show a modal dialog on the successful path.
-- **Do not break existing workflows.** The MVP workflow is the contract:
-  select `transition` track, position cursor, run once, get one item at the
-  cursor, `Ctrl+Z` removes it.
+- **Do not break existing workflows.** The core workflow is the contract:
+  select a track named after a configured category, position the cursor, run
+  once, get one item at the cursor, `Ctrl+Z` removes it.
 - Match the surrounding style: 4-space indent, `local function` declarations,
   lowercase names, snake-case config keys.
 
@@ -169,10 +171,9 @@ same time.
 These are **ideas, not requirements**. Do not implement them unless the task
 explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
 
-- **Multiple categories** — more track-name → folder mappings (gun, impact,
-  whoosh, footstep, ...).
 - **Configurable category mapping** — categories defined in a data file rather
-  than inline Lua, if it stays simple.
+  than inline Lua, if it stays simple. (Multiple inline categories are already
+  implemented — Phase 1.)
 - **Mouse interaction** — Ctrl/Shift/Alt-click and mouse modifiers. Investigate
   what REAPER supports natively (mouse modifier contexts, custom actions,
   toolbar buttons) before committing to an implementation.

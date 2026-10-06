@@ -1,7 +1,8 @@
 # Architecture
 
-This document describes how the MVP is put together and, importantly, where the
-extension points are. It is deliberately short — the MVP is one Lua file.
+This document describes how the script is put together and, importantly, where
+the extension points are. It is deliberately short — the implementation is one
+Lua file.
 
 ## Pipeline
 
@@ -41,13 +42,28 @@ extension points are. It is deliberately short — the MVP is one Lua file.
 
 The only place users edit. It holds:
 
-- `category_folders` — the category → folder map. This is the single source of
-  truth for routing.
+- `category_folders` — the **track name → folder** map. This is the single
+  source of truth for routing. The key is the REAPER track name (the category);
+  the value is the folder on disk. The default configuration defines five
+  categories:
+
+  ```lua
+  category_folders = {
+      transition = "D:/SFX/Transitions",
+      gun        = "D:/SFX/Guns",
+      impact     = "D:/SFX/Impacts",
+      whoosh     = "D:/SFX/Whooshes",
+      footstep   = "D:/SFX/Footsteps",
+  }
+  ```
+
+  For example, `gun = "D:/SFX/Guns"` means a track named `gun` uses audio from
+  `D:/SFX/Guns`. The paths are placeholders for the user to change.
 - `supported_extensions` — which file extensions count as importable audio.
 - `undo_prefix` — prefix for the undo description.
 
-The `transition` support in the MVP is just one row here. No business logic
-mentions the word "transition".
+No business logic mentions any specific category name; categories exist only as
+rows in this table. Adding one is a configuration change.
 
 ### 2. Pure helpers (no REAPER API)
 
@@ -113,7 +129,7 @@ These are the seams intended for future growth. They are intentionally small.
 
 | Future feature | Touch point |
 | --- | --- |
-| More categories | add rows to `CONFIG.category_folders` |
+| Additional categories (beyond the five defaults) | add rows to `CONFIG.category_folders` |
 | Fuzzy/partial track matching | `resolveCategoryFromTrackName` |
 | Config file instead of inline table | replace the literal `CONFIG` table; the rest is unchanged |
 | Avoid immediate repeats / weighting | the selection step in `main()`; add a pure `pickRandomFile(files, history)` helper |

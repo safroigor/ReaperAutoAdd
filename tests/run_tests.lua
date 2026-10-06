@@ -89,15 +89,25 @@ equals("joinPath: forward trailing slash", Sfx.joinPath("C:/a/", "b.wav"), "C:/a
 equals("joinPath: backslash path", Sfx.joinPath("C:\\a\\", "b.wav"), "C:\\a\\b.wav")
 
 -- ---------------------------------------------------------------------
--- resolveCategoryFromTrackName (MVP: only "transition")
+-- resolveCategoryFromTrackName (Phase 1: five categories)
 -- ---------------------------------------------------------------------
 
-equals("resolve: lower", Sfx.resolveCategoryFromTrackName("transition"), "transition")
-equals("resolve: Title", Sfx.resolveCategoryFromTrackName("Transition"), "transition")
-equals("resolve: UPPER", Sfx.resolveCategoryFromTrackName("TRANSITION"), "transition")
+local CATEGORIES = { "transition", "gun", "impact", "whoosh", "footstep" }
+
+-- Every configured category resolves from a track name, in any case.
+for _, category in ipairs(CATEGORIES) do
+    equals("resolve: " .. category .. " (lower)", Sfx.resolveCategoryFromTrackName(category), category)
+    equals("resolve: " .. category .. " (UPPER)", Sfx.resolveCategoryFromTrackName(category:upper()), category)
+end
+
+equals("resolve: Title case", Sfx.resolveCategoryFromTrackName("Transition"), "transition")
+equals("resolve: mixed case", Sfx.resolveCategoryFromTrackName("WhOoSh"), "whoosh")
 equals("resolve: surrounding spaces", Sfx.resolveCategoryFromTrackName("  transition  "), "transition")
-equals("resolve: wrong category", Sfx.resolveCategoryFromTrackName("dialogue"), nil)
+
+-- Unknown categories must be rejected (exact match only).
+equals("resolve: unknown category", Sfx.resolveCategoryFromTrackName("dialogue"), nil)
 equals("resolve: no partial match", Sfx.resolveCategoryFromTrackName("trans"), nil)
+equals("resolve: no superstring match", Sfx.resolveCategoryFromTrackName("transition2"), nil)
 equals("resolve: empty string", Sfx.resolveCategoryFromTrackName(""), nil)
 equals("resolve: nil", Sfx.resolveCategoryFromTrackName(nil), nil)
 
@@ -130,6 +140,13 @@ equals("collect: uppercase ext kept", files[4], "C:/SFX/Transitions/hit.FLAC")
 
 local none = Sfx.collectSupportedAudioFiles("C:/empty", fakeEnumerate({ "x.txt", "y.png", "z" }))
 equals("collect: nothing supported", #none, 0)
+
+-- Folder/file validation works for any configured category folder, not just
+-- the transition one.
+local gunFiles = Sfx.collectSupportedAudioFiles("D:/SFX/Guns",
+    fakeEnumerate({ "shot1.wav", "shot2.wav", "notes.txt", "cover.png" }))
+equals("collect: gun folder filters unsupported", #gunFiles, 2)
+equals("collect: gun path joined", gunFiles[1], "D:/SFX/Guns/shot1.wav")
 
 -- ---------------------------------------------------------------------
 -- directoryExists (REAPER enumerators replaced by fakes)
@@ -191,8 +208,16 @@ equals("capitalize: already capitalized", Sfx.capitalize("Whoosh"), "Whoosh")
 equals("supportedFormatList", Sfx.supportedFormatList(), ".aif, .aiff, .flac, .mp3, .ogg, .wav")
 
 local categories = Sfx.configuredCategories()
-equals("configuredCategories: count", #categories, 1)
-equals("configuredCategories: first", categories[1], "transition")
+equals("configuredCategories: count", #categories, 5)
+equals("configuredCategories: sorted", table.concat(categories, ","),
+    "footstep,gun,impact,transition,whoosh")
+
+-- Every configured category must point at a non-empty string folder.
+for _, category in ipairs(CATEGORIES) do
+    local folder = Sfx.CONFIG.category_folders[category]
+    check("config: " .. category .. " has a folder",
+        type(folder) == "string" and folder ~= "")
+end
 
 -- ---------------------------------------------------------------------
 -- Summary

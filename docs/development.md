@@ -78,26 +78,27 @@ instead of testing it only manually.
 
 ## Manual test cases
 
-Run these inside REAPER. They mirror the acceptance criteria of the MVP.
+Run these inside REAPER. They mirror the acceptance criteria of the project.
 
 | # | Scenario | Setup | Expected |
 | --- | --- | --- | --- |
 | 1 | Happy path | Track named `transition` selected, cursor placed, folder has several supported files | One random file inserted at the cursor on that track; no dialog |
-| 2 | Case-insensitive | Repeat #1 with track named `Transition`, then `TRANSITION` | Same behaviour each time |
-| 3 | No selected track | Deselect all tracks, run the action | Clear "No track selected." dialog; nothing inserted |
-| 4 | Wrong track | Select a track named `dialogue`, run the action | "Selected track is not a supported category." dialog; nothing inserted |
-| 5 | Missing folder | Point `CONFIG` at a non-existent path, run | "The transition folder does not exist…" dialog; nothing inserted |
-| 6 | Empty folder | Point `CONFIG` at an existing empty folder, run | "No supported audio files found…" dialog; nothing inserted |
-| 7 | Unsupported files | Folder contains only `.txt`/images (and/or subfolders), run | Same "no supported audio files" dialog; subfolders/files ignored |
-| 8 | Undo | Perform #1, then press `Ctrl+Z` once | The inserted item is removed in one step; cursor/selection unchanged |
-| 9 | Multiple invocations | Move the cursor and run several times | Each run inserts an independent item at its own cursor position |
+| 2 | Category routing | Repeat #1 for tracks named `gun`, `impact`, `whoosh`, `footstep` (each with its own folder) | Each category pulls from its own folder; e.g. `impact` never uses the `gun` folder |
+| 3 | Case-insensitive | Repeat #1 with track named `Transition`, `Gun`, `IMPACT`, etc. | Same behaviour each time |
+| 4 | No selected track | Deselect all tracks, run the action | Clear "No track selected." dialog; nothing inserted |
+| 5 | Wrong track | Select a track named `dialogue`, run the action | "Selected track is not a supported category." dialog; nothing inserted |
+| 6 | Missing folder | Point a category's `CONFIG` path at a non-existent folder, run | "The <category> folder does not exist…" dialog; nothing inserted |
+| 7 | Empty folder | Point a category's `CONFIG` path at an existing empty folder, run | "No supported audio files found…" dialog; nothing inserted |
+| 8 | Unsupported files | Folder contains only `.txt`/images (and/or subfolders), run | Same "no supported audio files" dialog; subfolders/files ignored |
+| 9 | Undo | Perform #1, then press `Ctrl+Z` once | The inserted item is removed in one step; cursor/selection unchanged |
+| 10 | Multiple invocations | Move the cursor and run several times | Each run inserts an independent item at its own cursor position |
 
 Additional checks worth doing once:
 
 - Run with the track **unnamed** → treated as unsupported category (error).
 - Run with a folder containing mixed-case extensions (`KICK.WAV`) → included.
-- Confirm a **single** undo entry named `Insert Random Transition` appears in
-  **Edit → Undo History**.
+- Confirm a **single** undo entry named `Insert Random <Category>` (e.g.
+  `Insert Random Gun`) appears in **Edit → Undo History**.
 
 ## Reporting a change
 

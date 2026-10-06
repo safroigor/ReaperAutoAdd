@@ -1,10 +1,10 @@
 # Roadmap
 
-Staged plan. Each phase is deliberately small. **Only Phase 0 is implemented.**
-Everything below it is a plan, not a promise — do not build ahead of the task
-you were given.
+Staged plan. Each phase is deliberately small. **Phases 0 and 1 are
+implemented.** Everything below them is a plan, not a promise — do not build
+ahead of the task you were given.
 
-## Phase 0 — MVP ✅ (current)
+## Phase 0 — MVP ✅
 
 One track, one folder, one random file, inserted at the cursor.
 
@@ -18,7 +18,7 @@ position on that track, undoable in a single step.
 
 See [`architecture.md`](architecture.md) for how it works.
 
-## Phase 1 — Categories
+## Phase 1 — Categories ✅ (current)
 
 Multiple track names / categories, configured rather than hard-coded.
 
@@ -30,14 +30,13 @@ whoosh     → Whooshes folder
 footstep   → Footsteps folder
 ```
 
-Notes:
+Implemented by defining five categories in `CONFIG.category_folders`. The key
+is the REAPER track name; the value is the folder. Matching stays **exact but
+case-insensitive**. Users can add more categories as configuration.
 
-- Add entries to `CONFIG.category_folders` (already supported by the data
-  model) and document them.
-- Decide whether to keep the mapping inline in Lua or move it to a small config
-  file. Keep it trivial to edit.
-- Keep matching **exact but case-insensitive**. Fuzzy/partial matching stays
-  out until asked for.
+Still open for later:
+
+- Decide whether to move the mapping from inline Lua to a small config file.
 - Consider a helper action that lists the configured categories, so users can
   discover them.
 

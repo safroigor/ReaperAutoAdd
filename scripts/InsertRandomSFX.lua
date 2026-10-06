@@ -1,18 +1,19 @@
 --[[
   InsertRandomSFX.lua
   -------------------
-  MVP ReaScript for the "REAPER Random SFX Inserter" project.
+  ReaScript for the "REAPER Random SFX Inserter" project.
 
   What it does
   ------------
   Takes the currently selected REAPER track, resolves its name to a
-  "category" (for the MVP the only category is `transition`), picks a random
-  supported audio file from that category's configured folder, and inserts it
-  as a normal media item at the current edit cursor position.
+  "category" (configured in CONFIG.category_folders, e.g. transition, gun,
+  impact, whoosh, footstep), picks a random supported audio file from that
+  category's configured folder, and inserts it as a normal media item at the
+  current edit cursor position.
 
   Workflow
   --------
-    1. Select a track named `transition`.
+    1. Select a track named after a configured category (e.g. `transition`).
     2. Put the edit cursor where you want the sound.
     3. Run this action (assign a shortcut / toolbar button if you like).
 
@@ -37,19 +38,29 @@
 -- =====================================================================
 
 local CONFIG = {
-    -- Map: category name -> absolute folder holding that category's audio.
-    -- The category name is matched case-insensitively against the selected
-    -- track's name.
+    -- Map: REAPER track name (the category) -> absolute folder of audio files
+    -- for that category. The KEY is the track name; the VALUE is the folder.
+    --
+    --     gun = "D:/SFX/Guns"
+    --
+    -- means: a selected REAPER track named "gun" uses audio files from
+    -- D:/SFX/Guns. Track names are matched case-insensitively, so "gun",
+    -- "Gun" and "GUN" all resolve to the same category.
+    --
+    -- NOTE: the folders below are PLACEHOLDERS. Point them at real folders on
+    -- your own machine before using the script.
     --
     -- Use forward slashes "/" on every platform: they work on Windows,
-    -- macOS and Linux. On Windows, "C:/SFX/Transitions" is equivalent to
-    -- "C:\\SFX\\Transitions" but avoids Lua backslash escaping.
+    -- macOS and Linux. On Windows, "D:/SFX/Guns" is equivalent to
+    -- "D:\\SFX\\Guns" but avoids Lua backslash escaping.
     --
-    -- Add more categories by adding lines, e.g.:
-    --     gun    = "C:/SFX/Guns",
-    --     impact = "C:/SFX/Impacts",
+    -- Add more categories by adding lines.
     category_folders = {
-        transition = "C:/SFX/Transitions",
+        transition = "D:/SFX/Transitions",
+        gun        = "D:/SFX/Guns",
+        impact     = "D:/SFX/Impacts",
+        whoosh     = "D:/SFX/Whooshes",
+        footstep   = "D:/SFX/Footsteps",
     },
 
     -- File extensions treated as importable audio. Matched
@@ -93,7 +104,7 @@ local function joinPath(folder, name)
 end
 
 -- Turn a track name into a configured category key, or nil.
--- Case-insensitive and whitespace-tolerant. Exact match only for the MVP;
+-- Case-insensitive and whitespace-tolerant. Exact match only for now;
 -- this is isolated here so fuzzy/partial matching can be added later.
 local function resolveCategoryFromTrackName(trackName)
     if type(trackName) ~= "string" then return nil end
@@ -238,7 +249,8 @@ local function main()
     local track = getSelectedTrackOrNil()
     if not track then
         return showError("No track selected.\n\n"
-            .. "Select a track named 'transition' first.")
+            .. "Select a track named after a configured category "
+            .. "(see CONFIG.category_folders) first.")
     end
 
     -- 2. Its name must resolve to a configured category.
