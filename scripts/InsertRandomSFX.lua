@@ -1,7 +1,9 @@
+-- @description SFX: Insert Random SFX
+-- @version 1.0
 --[[
   InsertRandomSFX.lua
   -------------------
-  ReaScript for the "REAPER Random SFX Inserter" project.
+  Core module + standard action for the "REAPER Random SFX Inserter".
 
   What it does
   ------------
@@ -9,10 +11,11 @@
   "category" (configured in CONFIG.category_folders, e.g. transition, gun,
   impact, whoosh, footstep), picks a random supported audio file from that
   category's configured folder, and inserts it as a normal media item at the
-  current edit cursor position.
+  current edit cursor position. The edit cursor then moves to the start of the
+  inserted item, and item-local metadata records where the sound came from.
 
-  Two workflows, one implementation
-  ---------------------------------
+  Entry points
+  ------------
   Standard action (this file, run directly):
     1. Select a track named after a configured category (e.g. `transition`).
     2. Put the edit cursor where you want the sound.
@@ -20,11 +23,15 @@
 
   Fast mouse workflow (see InsertRandomSFXAtMouse.lua):
     Move the mouse over the Arrange View at the desired track/time and press
-    Alt+left-click. The track/time under the mouse are used and the edit
-    cursor is left untouched.
+    Alt+left-click.
 
-  Both call the shared `insertRandomForTrackAtPosition(track, position)`
-  below, so they can never drift apart.
+  Sample browsing (see NextSample.lua / PreviousSample.lua):
+    With an inserted SFX item selected, step to the next/previous file in the
+    same library, replacing the item's source in place.
+
+  All entry points call the shared functions below
+  (`insertRandomForTrackAtPosition`, `browseSample`), so they cannot drift
+  apart.
 
   Design
   ------
@@ -89,6 +96,25 @@ local CONFIG = {
 }
 
 -- =====================================================================
+-- STORED-STATE IDENTIFIERS (not user-editable)
+-- =====================================================================
+
+-- Item-local metadata keys, stored with REAPER's native P_EXT: mechanism so an
+-- item keeps knowing its library even if the track is renamed later.
+local ITEM_META = {
+    category = "sfx_category",
+    library  = "sfx_library",
+    source   = "sfx_source",
+}
+
+-- Project-level state section for the "avoid immediate repeat" memory. Saved
+-- in the .RPP and therefore survives separate script runs.
+local PROJ_STATE_SECTION = "RandomSFXInserter"
+
+local BROWSE_NEXT = 1
+local BROWSE_PREVIOUS = -1
+
+-- =====================================================================
 -- PURE HELPERS -- no REAPER API access, unit-tested in tests/run_tests.lua
 -- =====================================================================
 
@@ -112,6 +138,66 @@ local function joinPath(folder, name)
     return folder .. "/" .. name
 end
 
+-- Normalize a filesystem path for stable storage/comparison: forward slashes,
+-- collapsed separators and no trailing slash (except a drive/root path).
+local function canonicalizePath(path)
+    if type(path) ~= "string" or path == "" then return "" end
+    local p = path:gsub("\\", "/"):gsub("//+", "/")
+    if #p > 1 and p:sub(-1) == "/" and not p:match("^%a:/$") then
+        p = p:gsub("/+$", "")
+    end
+    return p
+end
+
+-- Compare two paths case-insensitively using their canonical forms.
+local function pathsEqual(a, b)
+    return canonicalizePath(a):lower() == canonicalizePath(b):lower()
+end
+
+-- Deterministic, human-friendly sort: case-insensitive, raw tie-break.
+local function sortPaths(paths)
+    table.sort(paths, function(a, b)
+        local la, lb = a:lower(), b:lower()
+        if la == lb then return a < b end
+        return la < lb
+    end)
+    return paths
+end
+
+-- 1-based index of `target` in `paths` (canonical comparison), or nil.
+local function findPathIndex(paths, target)
+    if type(target) ~= "string" or target == "" then return nil end
+    for i = 1, #paths do
+        if pathsEqual(paths[i], target) then return i end
+    end
+    return nil
+end
+
+-- Uniform random 1-based index in [1, count], avoiding `excludeIndex`.
+-- With a single candidate that same index is returned (repeats allowed).
+local function chooseRandomIndex(count, excludeIndex)
+    if count <= 0 then return nil end
+    if count == 1 then return 1 end
+    if not excludeIndex or excludeIndex < 1 or excludeIndex > count then
+        return math.random(count)
+    end
+    local r = math.random(count - 1)
+    if r >= excludeIndex then r = r + 1 end
+    return r
+end
+
+-- Step one item forward/backward with wrap-around. count <= 1 is a no-op.
+local function browseIndex(index, count, direction)
+    if count <= 1 then return index end
+    local i = index + direction
+    if i < 1 then
+        i = count
+    elseif i > count then
+        i = 1
+    end
+    return i
+end
+
 -- Turn a track name into a configured category key, or nil.
 -- Case-insensitive and whitespace-tolerant. Exact match only for now;
 -- this is isolated here so fuzzy/partial matching can be added later.
@@ -124,10 +210,10 @@ local function resolveCategoryFromTrackName(trackName)
     return nil
 end
 
--- Collect the supported audio files in `folder`, returning full paths.
--- `enumerate` is injectable for tests; it defaults to the REAPER API.
--- reaper.EnumerateFiles lists files only (subdirectories come from
--- EnumerateSubdirectories), so subfolders are ignored by construction and
+-- Collect the supported audio files in `folder`, sorted deterministically,
+-- returning full paths. `enumerate` is injectable for tests; it defaults to
+-- the REAPER API. reaper.EnumerateFiles lists files only (subdirectories come
+-- from EnumerateSubdirectories), so subfolders are ignored by construction and
 -- unsupported files are filtered out here.
 local function collectSupportedAudioFiles(folder, enumerate)
     enumerate = enumerate or function(path, index)
@@ -143,7 +229,7 @@ local function collectSupportedAudioFiles(folder, enumerate)
         end
         index = index + 1
     end
-    return files
+    return sortPaths(files)
 end
 
 -- Best-effort "does this directory exist" test using only REAPER APIs.
@@ -209,6 +295,11 @@ local function getSelectedTrackOrNil()
     return reaper.GetSelectedTrack(0, 0)
 end
 
+local function getSelectedMediaItemOrNil()
+    if reaper.CountSelectedMediaItems(0) < 1 then return nil end
+    return reaper.GetSelectedMediaItem(0, 0)
+end
+
 local function getTrackName(track)
     local _, name = reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "", false)
     return name or ""
@@ -218,11 +309,38 @@ local function showError(message)
     reaper.ShowMessageBox(message, "Random SFX Inserter", 0)
 end
 
--- Insert `filePath` onto `track` at `pos`, returning true on success.
--- Uses REAPER's own importer (InsertMedia) so REAPER determines the media
--- source properties, then pins the newly created item(s) to the exact cursor
--- position, independent of REAPER's insert-position preference.
-local function insertMediaAtCursor(track, filePath, pos)
+-- Item-local metadata (persistent P_EXT: string state).
+local function getItemMetadata(item, key)
+    local _, value = reaper.GetSetMediaItemInfo_String(
+        item, "P_EXT:" .. key, "", false)
+    return value or ""
+end
+
+local function setItemMetadata(item, key, value)
+    reaper.GetSetMediaItemInfo_String(item, "P_EXT:" .. key, value or "", true)
+end
+
+local function writeItemMetadata(item, category, library, source)
+    setItemMetadata(item, ITEM_META.category, category)
+    setItemMetadata(item, ITEM_META.library, canonicalizePath(library))
+    setItemMetadata(item, ITEM_META.source, canonicalizePath(source))
+end
+
+-- Project-level state (survives separate script runs; saved in the .RPP).
+local function getProjectState(key)
+    local retval, value = reaper.GetProjExtState(0, PROJ_STATE_SECTION, key)
+    if retval == 0 or not value or value == "" then return nil end
+    return value
+end
+
+local function setProjectState(key, value)
+    reaper.SetProjExtState(0, PROJ_STATE_SECTION, key, value or "")
+end
+
+-- Insert `filePath` onto `track` at `pos`, returning the new media item (or
+-- nil). Uses REAPER's own importer (InsertMedia) so REAPER determines the
+-- media source properties, then pins the new item to the exact position.
+local function insertMediaOnTrack(track, filePath, pos)
     local existing = {}
     for i = 0, reaper.CountTrackMediaItems(track) - 1 do
         existing[reaper.GetTrackMediaItem(track, i)] = true
@@ -230,15 +348,50 @@ local function insertMediaAtCursor(track, filePath, pos)
 
     reaper.InsertMedia(filePath, 0) -- 0 = add to current track
 
-    local inserted = false
+    local inserted = nil
     for i = 0, reaper.CountTrackMediaItems(track) - 1 do
         local item = reaper.GetTrackMediaItem(track, i)
         if not existing[item] then
             reaper.SetMediaItemInfo_Value(item, "D_POSITION", pos)
-            inserted = true
+            inserted = item
         end
     end
     return inserted
+end
+
+-- Move the edit cursor onto `item`'s exact start (from its D_POSITION, never
+-- from the source duration).
+local function setEditCursorToItemStart(item)
+    local pos = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
+    reaper.SetEditCurPos(pos, false, false)
+    return pos
+end
+
+-- Replace `take`'s media source with the file at `newPath`. Returns
+-- (true, naturalLength) on success.
+--
+-- Ownership: SetMediaItemTake_Source does NOT destroy the old source, so we
+-- retrieve and destroy it ourselves. The freshly created new source becomes
+-- owned by the take.
+local function replaceTakeSource(take, newPath)
+    local newSource = reaper.PCM_Source_CreateFromFile(newPath)
+    if not newSource then return false end
+
+    local oldSource = reaper.GetMediaItemTake_Source(take)
+    if not reaper.SetMediaItemTake_Source(take, newSource) then
+        reaper.PCM_Source_Destroy(newSource)
+        return false
+    end
+    if oldSource then
+        reaper.PCM_Source_Destroy(oldSource)
+    end
+
+    -- Natural length, no stretch and no offset: the new source defines the
+    -- item, we do not preserve the previous D_LENGTH.
+    reaper.SetMediaItemTakeInfo_Value(take, "D_STARTOFFS", 0)
+    reaper.SetMediaItemTakeInfo_Value(take, "D_PLAYRATE", 1)
+    local length = reaper.GetMediaSourceLength(newSource)
+    return true, length
 end
 
 local function seedRandom()
@@ -254,12 +407,10 @@ end
 -- =====================================================================
 
 -- Resolve `track`'s category, pick a random file from that category's folder
--- and insert it on `track` at `position`. Returns true on success. Errors are
--- reported to the user; success is silent.
---
--- This is the single implementation shared by both entry points:
---   * InsertRandomSFX.lua        -> selected track + current edit cursor
---   * InsertRandomSFXAtMouse.lua -> track + time under the mouse
+-- (avoiding the immediately previous pick for that category) and insert it on
+-- `track` at `position`. Writes item metadata, remembers the pick for
+-- duplicate prevention and moves the edit cursor to the item start.
+-- Returns true on success. Errors are reported to the user.
 local function insertRandomForTrackAtPosition(track, position)
     -- 1. The track's name must resolve to a configured category.
     local trackName = getTrackName(track)
@@ -292,17 +443,101 @@ local function insertRandomForTrackAtPosition(track, position)
             category, folder, supportedFormatList()))
     end
 
-    -- 4. Pick one at random and insert it at `position`.
+    -- 4. Pick at random, avoiding the immediately previous file for this
+    -- category (tracked per category, project-scoped).
     seedRandom()
-    local filePath = files[math.random(#files)]
+    local previous = getProjectState(category)
+    local index = chooseRandomIndex(#files, findPathIndex(files, previous))
+    local filePath = files[index]
 
+    -- 5. Insert, tag the item and finish as one undo step.
     reaper.Undo_BeginBlock()
-    local ok = insertMediaAtCursor(track, filePath, position)
+    local item = insertMediaOnTrack(track, filePath, position)
+    if item then
+        writeItemMetadata(item, category, folder, filePath)
+    end
     reaper.Undo_EndBlock(CONFIG.undo_prefix .. capitalize(category), -1)
 
-    -- 5. Only complain on failure; success stays silent and instant.
-    if not ok then
+    if not item then
         return showError("Failed to insert the selected file:\n" .. filePath)
+    end
+
+    -- Remember this pick (outside undo: project state is not undoable) and put
+    -- the edit cursor on the new item's start.
+    setProjectState(category, canonicalizePath(filePath))
+    setEditCursorToItemStart(item)
+    return true
+end
+
+-- =====================================================================
+-- SAMPLE BROWSING (shared by NextSample.lua / PreviousSample.lua)
+-- =====================================================================
+
+-- Replace the selected item's source with the next/previous file from the
+-- library recorded in its metadata. `direction` is BROWSE_NEXT or
+-- BROWSE_PREVIOUS. Keeps the item, its track and its exact start position;
+-- the new source determines the natural length. One undo step. Errors are
+-- reported to the user.
+local function browseSample(direction)
+    -- 1. There must be a selected item carrying our metadata.
+    local item = getSelectedMediaItemOrNil()
+    if not item then
+        return showError("No media item selected.\n\n"
+            .. "Select an SFX item inserted by this tool, then try again.")
+    end
+
+    local library = getItemMetadata(item, ITEM_META.library)
+    local source = getItemMetadata(item, ITEM_META.source)
+    if library == "" or source == "" then
+        return showError("The selected item has no SFX library metadata.\n\n"
+            .. "Insert it with 'SFX: Insert Random SFX' first.")
+    end
+
+    -- 2. The recorded library must still contain supported audio files.
+    local files = collectSupportedAudioFiles(library)
+    if #files == 0 then
+        return showError(string.format(
+            "No supported audio files found in the stored library:\n%s",
+            library))
+    end
+
+    -- 3. The item's current source must be findable, otherwise refuse to make
+    -- an arbitrary destructive change.
+    local index = findPathIndex(files, source)
+    if not index then
+        return showError(string.format(
+            "The item's source is not in its stored library, so nothing was "
+            .. "changed.\n\nSource:\n%s\n\nLibrary:\n%s",
+            source, library))
+    end
+
+    if #files == 1 then
+        return true -- single-file library: nothing to browse to
+    end
+
+    local take = reaper.GetActiveTake(item)
+    if not take then
+        return showError("The selected item has no active take.")
+    end
+
+    local newIndex = browseIndex(index, #files, direction)
+    local newPath = files[newIndex]
+    local position = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
+    local description = (direction == BROWSE_NEXT)
+        and "SFX: Next Sample" or "SFX: Previous Sample"
+
+    reaper.Undo_BeginBlock()
+    local ok, length = replaceTakeSource(take, newPath)
+    if ok then
+        -- Keep the exact start; let the new source define the length.
+        reaper.SetMediaItemInfo_Value(item, "D_POSITION", position)
+        reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
+        setItemMetadata(item, ITEM_META.source, canonicalizePath(newPath))
+    end
+    reaper.Undo_EndBlock(description, -1)
+
+    if not ok then
+        return showError("Failed to replace the source:\n" .. newPath)
     end
     return true
 end
@@ -327,18 +562,28 @@ end
 -- ENTRY POINT / MODULE HOOK
 -- =====================================================================
 
--- When this file is loaded as a module -- by the automated tests, or by
--- InsertRandomSFXAtMouse.lua -- it must NOT run main(); it only returns its
--- functions. Running it normally inside REAPER executes main().
+-- When this file is loaded as a module -- by the automated tests, or by the
+-- action wrappers -- it must NOT run main(); it only returns its functions.
+-- Running it normally inside REAPER executes main().
 if not _G.SFX_LOAD_AS_MODULE then
     main()
 end
 
 return {
     CONFIG = CONFIG,
+    ITEM_META = ITEM_META,
+    PROJ_STATE_SECTION = PROJ_STATE_SECTION,
+    BROWSE_NEXT = BROWSE_NEXT,
+    BROWSE_PREVIOUS = BROWSE_PREVIOUS,
     getExtension = getExtension,
     isSupportedAudioFile = isSupportedAudioFile,
     joinPath = joinPath,
+    canonicalizePath = canonicalizePath,
+    pathsEqual = pathsEqual,
+    sortPaths = sortPaths,
+    findPathIndex = findPathIndex,
+    chooseRandomIndex = chooseRandomIndex,
+    browseIndex = browseIndex,
     resolveCategoryFromTrackName = resolveCategoryFromTrackName,
     collectSupportedAudioFiles = collectSupportedAudioFiles,
     directoryExists = directoryExists,
@@ -346,4 +591,5 @@ return {
     supportedFormatList = supportedFormatList,
     configuredCategories = configuredCategories,
     insertRandomForTrackAtPosition = insertRandomForTrackAtPosition,
+    browseSample = browseSample,
 }

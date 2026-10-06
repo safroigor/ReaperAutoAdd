@@ -1,8 +1,9 @@
 # Roadmap
 
 Staged plan. Each phase is deliberately small. **Phases 0 and 1 are complete,
-and the Alt+click part of Phase 3 is implemented.** Everything else below is a
-plan, not a promise — do not build ahead of the task you were given.
+the immediate-repeat part of Phase 2 is done, and Phase 3 (fast interaction:
+Alt+click insertion and Alt+wheel browsing) is done.** Everything else below is
+a plan, not a promise — do not build ahead of the task you were given.
 
 ## Phase 0 — MVP ✅
 
@@ -40,37 +41,51 @@ Still open for later:
 - Consider a helper action that lists the configured categories, so users can
   discover them.
 
-## Phase 2 — Better randomisation
+## Phase 2 — Better randomisation 🚧 (immediate repeat done)
 
-- Avoid immediate repetition (remember the last file, or a short history).
-- Optional history / weight per category.
-- Weighted selection (e.g., some samples more likely than others).
+- ✅ Avoid immediate repetition: the same file is never picked twice in a row
+  for the same category. State is project-scoped (`SetProjExtState`) and tracked
+  per category.
+- ⏳ Optional history / weight per category.
+- ⏳ Weighted selection (e.g., some samples more likely than others).
 - Keep this logic **pure and tested**; the folder-listing layer should not need
   to change.
 
-## Phase 3 — Fast interaction 🚧 (Alt+click implemented)
+## Phase 3 — Fast interaction ✅
 
-Goal: keep the mouse in the Arrange View and place a sound with one gesture.
+Goal: keep the mouse in the Arrange View and place/browse sounds with one
+gesture.
 
 Implemented:
 
 - **Alt+left-click** in the Arrange View inserts a random SFX at the mouse time
-  on the track under the mouse, **without moving the edit cursor**.
-- Uses only native APIs: `GetMousePosition`, `GetTrackFromPoint`,
-  `GetSet_ArrangeView2` (mouse X → project time), `SetOnlyTrackSelected`.
-- Implemented as a thin wrapper (`InsertRandomSFXAtMouse.lua`) that calls the
-  shared insertion logic, so the standard action is untouched.
-- Requires binding the wrapper to **Track** and **Media item** left-click/Alt
-  mouse-modifier contexts.
+  on the track under the mouse. Uses only native APIs: `GetMousePosition`,
+  `GetTrackFromPoint`, `GetSetArrangeView2` (mouse X → project time),
+  `SetOnlyTrackSelected`.
+- **Alt+mouse-wheel** browsing replaces the selected item's source with the
+  next/previous file in its library (`SFX: Next Sample` /
+  `SFX: Previous Sample`). REAPER has no media-item wheel context, so this is an
+  Action-List shortcut / custom action.
+- Implemented as thin wrappers that call the shared core, so the standard action
+  is untouched.
+- After insertion the edit cursor moves to the inserted item's start.
 
 Still open:
 
 - Additional mouse contexts: item edge, fade/autocrossfade, "Media item bottom
   half" (only if a real workflow needs them).
+- Resolve the item under the mouse inside the script (today the recommended
+  wheel setup selects it via a separate action).
 - Investigate whether a single context could cover the whole arrange view.
-- Toolbar buttons / keyboard shortcuts remain available as alternatives.
 
-## Phase 4 — Production workflow
+## Phase 4 — Production workflow 🚧 (metadata + browsing done)
+
+Done:
+
+- ✅ **Item metadata** — each inserted item records `category`, `library` and
+  `source` via native `P_EXT:` item state.
+- ✅ **Sample browsing** — Next/Previous replace the item's source in place,
+  keeping its exact start and using the new source's natural length.
 
 Potentially, in rough priority:
 
@@ -83,7 +98,7 @@ Potentially, in rough priority:
 - **Transient / peak detection** — detect transients and optionally snap the
   inserted item to a nearby transient.
 - **Random gain / pitch / pan** and light humanisation.
-- **Metadata** — read tags/notes for filtering.
+- **Metadata-driven filtering** — read tags/notes for filtering.
 - **UI** — a small settings panel, only if the config outgrows a table.
 
 Each item should be justified by a real workflow need.

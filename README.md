@@ -1,11 +1,13 @@
 # REAPER Random SFX Inserter
 
-A tiny REAPER ReaScript that drops a random sound effect onto a track, chosen
-by the track's name, either at the edit cursor or directly at the mouse.
+A tiny, dependency-free REAPER ReaScript toolkit that drops a random sound
+effect onto a track, chosen by the track's name, and lets you browse through the
+same library with a mouse gesture.
 
-> **Status: Phase 3 (fast interaction) in progress.** Five categories
-> (`transition`, `gun`, `impact`, `whoosh`, `footstep`) and two workflows —
-> standard action and **Alt+click in the Arrange View** — are implemented. See
+> **Status: categories, mouse placement and sample browsing implemented.**
+> Five categories (`transition`, `gun`, `impact`, `whoosh`, `footstep`), two
+> insertion workflows (**standard action** and **Alt+click**), and
+> **Next/Previous sample** browsing are available. See
 > [Current status](#current-status) and the [roadmap](docs/roadmap.md).
 
 ## What it does
@@ -16,34 +18,11 @@ where the sound belongs and press a key or Alt+click. The script looks at the
 track's name, treats it as a **category**, finds that category's folder, picks a
 random supported audio file, and inserts it as a normal REAPER media item.
 
-There are two workflows, sharing one implementation.
-
-**Standard action** — selected track + edit cursor:
+The mapping is data-driven:
 
 ```text
-selected track name
-       ↓
-category_folders lookup
-       ↓
-configured folder
-       ↓
-random audio file
-       ↓
-insert at edit cursor
-```
-
-**Fast mouse workflow** — track + time under the mouse, edit cursor untouched:
-
-```text
-mouse position in the Arrange View
-       ↓
-track under mouse  +  time under mouse (from mouse X)
-       ↓
-category_folders lookup  ->  configured folder
-       ↓
-random audio file
-       ↓
-insert at the mouse time on the mouse track
+track name  ->  category_folders lookup  ->  configured folder
+            ->  random audio file  ->  media item at the position
 ```
 
 Several categories ship out of the box:
@@ -64,14 +43,19 @@ Adding more categories is a configuration change, not a rewrite. See
 This is an intentionally small, dependency-free project:
 
 - ✅ Five categories: `transition`, `gun`, `impact`, `whoosh`, `footstep`.
-- ✅ Case-insensitive track-name matching.
-- ✅ Random selection from a configured folder.
+- ✅ Case-insensitive, exact track-name matching.
+- ✅ Random selection from a configured folder, **avoiding the immediately
+  previous file** for that category (no long-term history).
 - ✅ Standard action: selected track + edit cursor, single undo step.
 - ✅ Fast mouse workflow: **Alt+left-click** in the Arrange View inserts at the
-  mouse time on the track under the mouse, **without moving the edit cursor**.
+  mouse time on the track under the mouse.
+- ✅ The edit cursor moves to the **start of the inserted item** after insertion.
+- ✅ Item-local metadata (`category`, `library`, `source`) via `P_EXT:`.
+- ✅ **Next/Previous Sample** actions replace the selected item's source in
+  place, keeping its exact start and using the new source's natural length.
 - ✅ Clear error messages, silent success.
-- ❌ No GUI, no database, no transient detection, no advanced randomisation.
-  (Those are future phases — see [`docs/roadmap.md`](docs/roadmap.md).)
+- ❌ No GUI, no database, no transient detection, no random gain/pitch/pan.
+  (Those are future phases — see [`docs/roadmap.md`](docs/roadmap.md)).
 
 ## Requirements
 
@@ -82,23 +66,27 @@ This is an intentionally small, dependency-free project:
 
 ## Installation
 
-Two scripts are provided. Keep them **in the same folder** (the mouse wrapper
-loads `InsertRandomSFX.lua` from its own directory).
+Four scripts are provided. **Keep them in the same folder** — the action
+wrappers load `InsertRandomSFX.lua` from their own directory.
+
+| Script | REAPER action |
+| --- | --- |
+| `scripts/InsertRandomSFX.lua` | `SFX: Insert Random SFX` (standard action) |
+| `scripts/InsertRandomSFXAtMouse.lua` | `SFX: Insert Random SFX At Mouse` (Alt+click) |
+| `scripts/NextSample.lua` | `SFX: Next Sample` |
+| `scripts/PreviousSample.lua` | `SFX: Previous Sample` |
 
 1. In REAPER, open **Actions → Show action list…**
-2. Click **New action → Load ReaScript…** and select
-   `scripts/InsertRandomSFX.lua` (the standard action).
-3. Click **New action → Load ReaScript…** again and select
-   `scripts/InsertRandomSFXAtMouse.lua` (the Alt+click workflow).
-4. (Optional) Right-click the standard action and assign a keyboard shortcut or
-   toolbar button.
-5. For the Alt+click workflow, configure the mouse modifiers (see
-   [Fast mouse workflow](#fast-mouse-workflow-altclick)).
+2. Click **New action → Load ReaScript…** and load each of the four scripts.
+3. (Optional) Assign a keyboard shortcut or toolbar button to the standard
+   action.
+4. Configure the mouse modifiers / shortcuts for the workflows you want (see
+   [Usage](#usage)).
 
-Both scripts have no dependencies; Lua is embedded in REAPER.
+The scripts have no dependencies; Lua is embedded in REAPER.
 
 > Tip: REAPER's action list can store the scripts wherever you keep your
-> ReaScripts. If you edit a file later, reload it from the action list (or use
+> ReaScripts. If you edit a file later, re-run it from the action list (or use
 > `Ctrl+S` in the built-in editor if you open it there).
 
 ## Configuration
@@ -133,6 +121,8 @@ Rules and tips:
   `D:/SFX/Guns` is equivalent to `D:\SFX\Guns` but avoids Lua backslash
   escaping. On macOS: `/Users/you/SFX/Guns`.
 - The script does **not** search subfolders; only the folder itself is used.
+- Files are listed in a **deterministic, case-insensitive sorted order**, which
+  is what Next/Previous Sample steps through.
 - Track names are matched **case-insensitively**, so `gun`, `Gun` and `GUN` all
   resolve to the `gun` category. Matching is exact (no partial matching): a
   track named `guns` is not the same as `gun`.
@@ -143,12 +133,12 @@ Rules and tips:
   list, or reopen it if you edited it in REAPER's editor).
 
 The other `CONFIG` fields are `supported_extensions` (which file types count as
-audio) and `undo_prefix` (the undo label). You normally don't need to change
-them.
+audio: `.wav`, `.aif`, `.aiff`, `.flac`, `.ogg`, `.mp3`) and `undo_prefix` (the
+undo label). You normally don't need to change them.
 
 ## Usage
 
-Both workflows share the same category configuration. Name a track after a
+All workflows share the same category configuration. Name a track after a
 configured category (`transition`, `gun`, `impact`, `whoosh`, `footstep`, or one
 you added).
 
@@ -156,42 +146,100 @@ you added).
 
 1. Select the track.
 2. Put the edit cursor where you want the sound.
-3. Run the `InsertRandomSFX.lua` action (shortcut or toolbar).
+3. Run the `SFX: Insert Random SFX` action (shortcut or toolbar).
 4. A random supported audio file from that category's folder is inserted at the
-   cursor.
+   cursor. The edit cursor then moves to the **start** of the new item.
 
 ### Fast mouse workflow (Alt+click)
-
-This is the fastest way to work: never leave the Arrange View.
 
 1. Move the mouse over the target track at the exact time you want the sound.
 2. **Alt+left-click.**
 
 The script resolves the track under the mouse and the project time under the
 mouse (from the mouse's X position), picks a random file for that track's
-category, and inserts it there. **The edit cursor is not moved.**
+category, and inserts it there. The edit cursor then moves to the new item's
+start.
 
 One-time mouse-modifier setup (required), in
 **Preferences → Editing Behavior → Mouse Modifiers**:
 
 | Context | Behavior | Modifier | Action |
 | --- | --- | --- | --- |
-| **Track** | left click | Alt | `InsertRandomSFXAtMouse.lua` |
-| **Media item** | left click | Alt | `InsertRandomSFXAtMouse.lua` |
+| **Track** | left click | Alt | `SFX: Insert Random SFX At Mouse` |
+| **Media item** | left click | Alt | `SFX: Insert Random SFX At Mouse` |
 
 Both contexts are required because REAPER hit-tests left clicks differently:
 empty track lane uses the **Track** context, while a click over a media item
-uses the **Media item** context. Assigning the same script to both makes
+uses the **Media item** context. Assigning the same action to both makes
 Alt+click behave identically in either case.
 
 Selecting the track under the mouse is part of this workflow (the importer
 inserts on the current track). That selection change is intentional and is not
 an undo step.
 
-For example, a track named `impact` pulls a random file from the folder mapped
-to `impact`; a track named `whoosh` pulls from the `whoosh` folder.
+### Sample browsing (Next / Previous Sample)
 
-Success is silent (no dialog); nothing is shown unless there is an error.
+After inserting an SFX, you can step through the same library without opening a
+browser:
+
+1. Select an inserted SFX item (or use the mouse-wheel setup below, which
+   selects the item under the mouse).
+2. Run `SFX: Next Sample` or `SFX: Previous Sample`.
+
+The item is **not** moved and **no new item is created**: the existing item's
+media source is replaced in place. Its exact start position is preserved and
+the new source determines the item's **natural length** (the previous length is
+not kept, and the new source is not time-stretched). Next wraps from the last
+file to the first; Previous wraps from the first to the last. The item's
+metadata is updated so further browsing stays in the same library.
+
+If the selected item has no SFX metadata, the library cannot be resolved, or
+the current source is not found in the library, nothing is changed and a clear
+message is shown. A one-file library is a safe no-op.
+
+#### Recommended Alt + mouse-wheel setup
+
+REAPER has **no "Media item → mouse wheel" mouse-modifier context**. Mouse wheel
+is assigned as a **shortcut in the Action List** (select the action, click
+**Add**, then hold **Alt** and scroll the wheel). REAPER sends the wheel as a
+relative value, so a plain action fires for both scroll directions; to make the
+direction matter, build a tiny custom action:
+
+**New action → New custom action…**, name it e.g. `SFX: Browse Sample
+(Alt+Wheel)`, and add these actions in order:
+
+```text
+1. Item: Select item under mouse cursor
+2. Skip next action if CC parameter >0/mid
+3. SFX: Previous Sample
+4. Skip next action if CC parameter <0/mid
+5. SFX: Next Sample
+```
+
+Then select the custom action, click **Add**, hold **Alt** and scroll the wheel
+so it is bound to `Alt+Mousewheel`. Now:
+
+```text
+mouse over an SFX item  ->  hold Alt  ->  wheel up   -> SFX: Next Sample
+mouse over an SFX item  ->  hold Alt  ->  wheel down -> SFX: Previous Sample
+```
+
+(The two `Skip next action if CC parameter …` actions are REAPER's built-in
+way to branch on wheel direction; filter the Action List for `Skip next action
+if CC` to find them.)
+
+**Simpler alternative** if you don't need direction branching: select the item,
+then bind `Alt+Mousewheel` to `SFX: Next Sample` and e.g.
+`Alt+Shift+Mousewheel` to `SFX: Previous Sample` in the Action List.
+
+Because the browsing actions operate on the **selected** item, the
+mouse-wheel custom action above selects the item under the mouse first. Making
+the script itself resolve the item under the mouse is a future enhancement.
+
+### Notes
+
+- Success is silent (no dialog); nothing is shown unless there is an error.
+- `Ctrl+Z` undoes each operation in a single step (insert, next, previous).
 
 Errors you may see:
 
@@ -203,25 +251,75 @@ Errors you may see:
 | Folder doesn't exist | "The <category> folder does not exist: …" |
 | Folder has no supported audio | "No supported audio files found …" |
 | Insertion failed | "Failed to insert the selected file: …" |
+| No item selected (browsing) | "No media item selected." |
+| Item has no SFX metadata | "The selected item has no SFX library metadata." |
+| Stored library empty/missing | "No supported audio files found in the stored library: …" |
+| Current source not in library | "The item's source is not in its stored library …" |
 
-If anything goes wrong, `Ctrl+Z` (a single undo) removes an inserted item.
+## Item metadata
+
+Each inserted item stores, in REAPER's native item extension state (`P_EXT:`):
+
+| Key | Example |
+| --- | --- |
+| `sfx_category` | `gun` |
+| `sfx_library` | `D:/SFX/Guns` |
+| `sfx_source` | `D:/SFX/Guns/gun_04.wav` |
+
+This is **item-local** state, so an existing SFX item still knows its library
+even if the track is renamed. Next/Previous Sample uses this metadata rather
+than the current track name. Paths are stored in a canonical form (forward
+slashes, no trailing slash) and compared case-insensitively.
+
+## Edit cursor behaviour
+
+After a successful insertion (either workflow) the edit cursor is set to the
+inserted item's exact `D_POSITION` — the start of the new item. It is never
+derived from the source duration and never left at the item's end. Next/Previous
+Sample does not move the edit cursor (it only replaces the source).
+
+## Immediate-repeat prevention
+
+Random selection will not pick the same file twice in a row for the same
+category. The previous pick is remembered per category in **project state**
+(`SetProjExtState`, saved in the `.RPP`), so it survives separate script runs
+and is independent for each category:
+
+```text
+gun    -> gun_03.wav
+impact -> impact_07.wav   (unaffected by the gun pick)
+```
+
+Allowed: `gun_01, gun_03, gun_01, gun_02`. Not allowed: `gun_01, gun_01`.
+
+If a library has only one file, that file may be inserted repeatedly (no error).
+Otherwise the remaining candidates are chosen uniformly. There is no long-term
+history or shuffle bag.
 
 ## Limitations
 
 Deliberately **not** implemented yet:
 
 - No subfolder scanning.
-- Plain uniform random selection (no "avoid immediate repeat", no weighting).
+- No long-term randomisation history / weighting (only immediate-repeat
+  avoidance).
 - No GUI / settings dialog.
 - No transient detection, no snap-to-transient.
+- Next/Previous operate on the **selected** item; the recommended mouse-wheel
+  setup selects the item under the mouse as a separate step.
+- REAPER has no media-item mouse-wheel mouse-modifier context; the Alt+wheel
+  setup is Action-List based (see above).
 - The Alt+click workflow covers the **Track** and **Media item** contexts only.
   Alt+click on some item sub-contexts (item edge, fade/autocrossfade, and
   "Media item bottom half" if enabled) may use a different REAPER mouse context
   and may require an additional binding in a future task.
+- Next/Previous reset the take's start offset and play rate so the new source
+  plays at its natural length (no time-stretch); other item/take properties
+  (volume, pan, mute, position) are preserved.
 - No random gain/pitch/pan, no fades, no trimming.
 - No project-specific or global config; the folder is edited in the script.
-- Folder existence is checked with REAPER's directory APIs (no direct
-  `stat`), which is sufficient but not a full filesystem abstraction.
+- Folder existence is checked with REAPER's directory APIs (no direct `stat`),
+  which is sufficient but not a full filesystem abstraction.
 
 ## Development & testing
 
@@ -237,9 +335,7 @@ manual test cases are in [`docs/development.md`](docs/development.md).
 
 ## Roadmap
 
-See [`docs/roadmap.md`](docs/roadmap.md) for the staged plan (categories, better
-randomisation, fast interaction, production workflow, and when/if to move beyond
-ReaScript).
+See [`docs/roadmap.md`](docs/roadmap.md) for the staged plan.
 
 ## License
 

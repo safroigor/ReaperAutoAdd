@@ -1,3 +1,5 @@
+-- @description SFX: Insert Random SFX At Mouse
+-- @version 1.0
 --[[
   InsertRandomSFXAtMouse.lua
   --------------------------
@@ -6,8 +8,8 @@
   What it does
   ------------
   Inserts a random SFX from the folder of the track UNDER THE MOUSE, at the
-  project time UNDER THE MOUSE in the Arrange View, WITHOUT moving the edit
-  cursor.
+  project time UNDER THE MOUSE in the Arrange View. The item is placed at the
+  mouse time and the edit cursor then moves to that item's start.
 
       mouse position
            |
@@ -112,7 +114,8 @@ local function main()
 
     -- InsertMedia(file, 0) targets the "current" track, so select the track
     -- under the mouse first. Selection is not an undoable operation, so it
-    -- does not add an undo point. The edit cursor is never touched.
+    -- does not add an undo point. The shared insertion logic then moves the
+    -- edit cursor onto the new item's start.
     reaper.SetOnlyTrackSelected(track)
 
     -- Shared insertion logic: category -> folder -> random file -> insert at

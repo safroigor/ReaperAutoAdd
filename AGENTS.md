@@ -35,36 +35,37 @@ key, get a suitable sound at the cursor.
 
 ## 2. Current implementation
 
-Two entry points share one implementation.
+All shared logic lives in
+[`scripts/InsertRandomSFX.lua`](scripts/InsertRandomSFX.lua) (core module +
+standard action). Three thin wrappers call it.
 
-**Standard action** —
-[`scripts/InsertRandomSFX.lua`](scripts/InsertRandomSFX.lua):
+**Insertion** — standard action, and
+[`InsertRandomSFXAtMouse.lua`](scripts/InsertRandomSFXAtMouse.lua) for Alt+click:
 
-1. Requires a selected track (errors otherwise).
+1. Requires a selected track (standard) or a track under the mouse (Alt+click).
 2. Resolves the track's name to a category, case-insensitively. Five categories
    are configured by default: `transition`, `gun`, `impact`, `whoosh`,
    `footstep`.
-3. Looks in the folder configured for that category.
-4. Lists the supported audio files directly inside that folder (subfolders are
-   ignored).
-5. Picks one at random.
-6. Inserts it as a normal media item at the current edit cursor position.
-7. Wraps the insertion in a single REAPER undo step
+3. Looks in the folder configured for that category and lists its supported
+   audio files (subfolders ignored), sorted deterministically.
+4. Picks one at random, **avoiding the immediately previous pick for that
+   category** (state kept in the project, tracked per category).
+5. Inserts it as a normal media item at the position (edit cursor, or mouse
+   time for Alt+click).
+6. Writes item metadata (`category`, `library`, `source`) via `P_EXT:`.
+7. Moves the edit cursor to the inserted item's start (`D_POSITION`).
+8. Wraps insert + metadata in a single REAPER undo step
    (`Insert Random <Category>`, e.g. `Insert Random Gun`).
 
-**Fast mouse workflow** —
-[`scripts/InsertRandomSFXAtMouse.lua`](scripts/InsertRandomSFXAtMouse.lua):
+**Sample browsing** — [`NextSample.lua`](scripts/NextSample.lua) /
+[`PreviousSample.lua`](scripts/PreviousSample.lua):
 
-1. Resolves the track under the mouse (`GetTrackFromPoint`) and the project time
-   under the mouse (`GetSet_ArrangeView2`, from the mouse X).
-2. Selects that track so `InsertMedia(file, 0)` targets it (selection is not an
-   undo step).
-3. Calls the same shared insertion logic at the mouse time.
-4. **Never moves the edit cursor.**
-
-Both entry points call `insertRandomForTrackAtPosition(track, position)` in the
-core script. The wrapper must be bound to the **Track** and **Media item**
-left-click / Alt mouse-modifier contexts.
+1. Reads the selected item's `library` / `source` metadata.
+2. Steps to the next/previous file in that library (sorted, wrap-around).
+3. Replaces the item's media source in place — no new item, same track, exact
+   start preserved, and the new source determines the item's natural length (no
+   time-stretch, old length not kept).
+4. Updates the `source` metadata. Single undo step.
 
 Supported formats: `.wav`, `.aif`, `.aiff`, `.flac`, `.ogg`, `.mp3`.
 
@@ -73,55 +74,48 @@ without being asked.
 
 ## 3. Architecture
 
-Two entry points converge on one shared function:
+Two shared operations, called by thin wrappers:
 
 ```text
-  standard action                Alt+click wrapper
-  selected track + edit cursor   track + time under mouse
-                \                       /
-                 v                     v
-        insertRandomForTrackAtPosition(track, position)
-                        │
-                        ▼
-        Category            (resolveCategoryFromTrackName)
-                        │
-                        ▼
-        Folder              (CONFIG.category_folders)
-                        │
-                        ▼
-     Audio file list        (collectSupportedAudioFiles)
-                        │
-                        ▼
-    Random selection        (math.random)
-                        │
-                        ▼
-     REAPER Insert          (insertMediaAtCursor -> reaper.InsertMedia)
-                        │
-                        ▼
-       Media Item
+  standard action        Alt+click wrapper         Next/Previous wrappers
+  selected track         track + time under mouse  selected media item
+  + edit cursor          + GetSet_ArrangeView2     + item metadata
+        \                       /                          │
+         v                     v                           v
+  insertRandomForTrackAtPosition(track, position)   browseSample(direction)
+        │                                                    │
+        ▼                                                    ▼
+  category -> folder -> files -> random pick -> insert   library -> files -> step -> replace source
+        │                                                    │
+        ▼                                                    ▼
+  item metadata + project state + cursor to item start   item metadata update
 ```
 
 Key rule: **the code must not be hard-coded around any single category.** Each
 category is just a row in the `CONFIG.category_folders` table. Adding a category
 is a configuration change, not a logic change.
 
-The core script is organised into three layers so future growth stays cheap:
+The core script is organised into these layers so future growth stays cheap:
 
-1. **Configuration** — the `CONFIG` table at the top of the script. Users edit
-   this; logic does not.
-2. **Pure helpers** — no REAPER API calls (extension parsing, category
-   resolution, path joining, file filtering, directory detection). These are
-   unit-tested outside REAPER.
-3. **REAPER API helpers** — small wrappers around `reaper.*` (track selection,
-   track name, error dialog, insertion). Keeping the API surface small keeps the
-   pure layer testable.
+1. **Configuration** — the `CONFIG` table. Users edit this; logic does not.
+2. **Stored-state identifiers** — `ITEM_META` (`P_EXT:` keys),
+   `PROJ_STATE_SECTION`, browse directions.
+3. **Pure helpers** — no REAPER API calls (extension parsing, category
+   resolution, path joining/canonicalization/comparison, file filtering and
+   sorting, directory detection, random-index and browse stepping). Unit-tested
+   outside REAPER.
+4. **REAPER API helpers** — small wrappers around `reaper.*` (selection, track
+   name, error dialog, item `P_EXT:` metadata, project state, insertion, edit
+   cursor, source replacement).
+5. **Shared operations** — `insertRandomForTrackAtPosition` and `browseSample`.
 
-Plus a thin **mouse wrapper** (`InsertRandomSFXAtMouse.lua`) that only resolves
-track + time from the mouse and calls the shared function.
+Plus three thin **wrappers** (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`,
+`PreviousSample.lua`) that only resolve an entry point and call the shared
+function.
 
 The core script ends with a documented **module hook**: when loaded with
 `_G.SFX_LOAD_AS_MODULE` set, it returns its functions instead of running
-`main()`. The tests and the mouse wrapper both use this.
+`main()`. The tests and all wrappers use this.
 
 See `docs/architecture.md` for extension points.
 
@@ -162,24 +156,35 @@ See `docs/architecture.md` for extension points.
   human-readable description, and must be a single undo step.
 - **Do not silently fail.** Show a clear REAPER message on every error path.
   Do **not** show a modal dialog on the successful path.
-- **The mouse workflow must not move the edit cursor.** Never call
-  `SetEditCurPos` in the wrapper. `GetCursorPosition()` must be unchanged
-  before and after an Alt+click insertion.
-- **Do not break existing workflows.** Both workflows are the contract:
+- **Insertion moves the edit cursor to the inserted item's start**, read from
+  the item's `D_POSITION` (never from the source duration, never left at the
+  item's end). This applies to both the standard and Alt+click workflows.
+- **Browsing must not move the item.** Next/Previous replace the active take's
+  source in place: same item, same track, exact `D_POSITION` preserved, and the
+  new source determines the natural length (`D_LENGTH`); do not keep the old
+  length or time-stretch.
+- **Item metadata is item-local** (`P_EXT:` keys `sfx_category`, `sfx_library`,
+  `sfx_source`). Browsing must use the stored library, never the current track
+  name. Canonicalize paths before storing/comparing.
+- **Duplicate-prevention state is project-scoped** (`SetProjExtState`), tracked
+  per category, outside undo history. Do not rely on Lua globals surviving
+  between script runs.
+- **Do not break existing workflows.** The contract:
   * standard action — select a category track, position the cursor, run once,
     get one item at the cursor;
-  * Alt+click — hover a track/time in the Arrange View, get one item there.
-  In both cases `Ctrl+Z` removes it in a single step.
+  * Alt+click — hover a track/time in the Arrange View, get one item there;
+  * Next/Previous — replace the selected item's source in place.
+  Each operation is a single undo step.
 - Match the surrounding style: 4-space indent, `local function` declarations,
   lowercase names, snake-case config keys.
 
 ## 6. Development workflow
 
 1. **Read** `AGENTS.md`, `docs/architecture.md` and the relevant source.
-2. **Modify** `scripts/InsertRandomSFX.lua` (core) and/or
-   `scripts/InsertRandomSFXAtMouse.lua` (wrapper), or add files under
-   `scripts/`. Keep the two scripts in the same directory: the wrapper loads the
-   core by relative path.
+2. **Modify** `scripts/InsertRandomSFX.lua` (core) and/or the wrappers
+   (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`, `PreviousSample.lua`), or
+   add files under `scripts/`. Keep all scripts in the same directory: the
+   wrappers load the core by relative path.
 3. **Run the automated tests** from the repository root:
 
    ```sh
@@ -187,14 +192,17 @@ See `docs/architecture.md` for extension points.
    ```
 
    These cover the pure logic only and require Lua 5.3+ but not REAPER.
-   Also syntax-check both scripts:
+   Also syntax-check every script:
 
    ```sh
    luac -p scripts/InsertRandomSFX.lua
    luac -p scripts/InsertRandomSFXAtMouse.lua
+   luac -p scripts/NextSample.lua
+   luac -p scripts/PreviousSample.lua
    ```
 
-   The mouse/time APIs cannot be unit-tested outside REAPER.
+   The REAPER APIs (insertion, edit cursor, metadata, project state, source
+   replacement) cannot be unit-tested outside REAPER.
 4. **Test inside REAPER** for anything touching the real API. DAW behaviour
    cannot be validated outside REAPER. Follow the manual test cases in
    `docs/development.md`.
@@ -219,16 +227,19 @@ explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
 - **Additional mouse contexts** — item edge / fade / "Media item bottom half"
   bindings, only if a real workflow needs them. (Alt+left-click on the Track and
   Media item contexts is already implemented — Phase 3.)
+- **Item-under-mouse browsing** — resolve the item under the mouse inside the
+  script instead of requiring it to be selected first.
 - **Transient / peak detection** — optionally snap an inserted item to a nearby
   transient.
-- **Randomisation improvements** — avoid immediate repeats, optional history,
-  weighted selection.
+- **Randomisation improvements** — optional history and weighted selection.
+  (Immediate-repeat avoidance is already implemented — Phase 2.)
 - **Subfolders** — optional recursive lookup within a category folder.
 - **Configuration levels** — project-specific config, per-user/global library
   config.
 - **Preview** — audition before/after insertion.
 - **Parameter randomisation** — random gain, pitch, pan.
 - **Batch insertion** — several items at once.
+- **Metadata-driven filtering** — read tags/notes for filtering.
 - **UI/settings** — a small settings window if configuration outgrows a table.
 - **Native extension** — only if ReaScript eventually proves insufficient for
   the workflow (for example, true mouse hooks). Explicitly out of scope now.

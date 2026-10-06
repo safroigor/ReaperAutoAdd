@@ -2,63 +2,50 @@
 
 This document describes how the scripts are put together and, importantly,
 where the extension points are. It is deliberately short — the implementation is
-two small Lua files.
+one core module plus three thin action wrappers.
 
-## Entry points and pipeline
+## Scripts and entry points
 
-Two entry points share one implementation, so the standard and mouse workflows
-can never drift apart:
+Four scripts; all shared logic lives in the core:
+
+| Script | Role |
+| --- | --- |
+| `scripts/InsertRandomSFX.lua` | **Core module** + standard action. Holds `CONFIG`, pure helpers, REAPER helpers and the two shared operations. |
+| `scripts/InsertRandomSFXAtMouse.lua` | Wrapper: resolves track + time from the mouse, then inserts. |
+| `scripts/NextSample.lua` | Wrapper: calls `browseSample(BROWSE_NEXT)`. |
+| `scripts/PreviousSample.lua` | Wrapper: calls `browseSample(BROWSE_PREVIOUS)`. |
+
+The wrappers contain no category/folder/undo logic. Each loads the core with
+`loadfile`, setting `_G.SFX_LOAD_AS_MODULE` so the core returns its functions
+instead of running `main()`. **All four files must stay in the same directory.**
 
 ```text
-  Entry point A: standard action          Entry point B: Alt+click wrapper
-  InsertRandomSFX.lua                     InsertRandomSFXAtMouse.lua
-    selected track                          track under mouse
-    + reaper.GetCursorPosition()            + reaper.GetSet_ArrangeView2(mouse x)
-                \                                   /
-                 \                                 /
-                  v                               v
-            insertRandomForTrackAtPosition(track, position)
-                              │
-                              ▼
-                     Category Resolver          resolveCategoryFromTrackName()
-                              │
-                              ▼
-                     Configured Folder          CONFIG.category_folders[category]
-                              │
-                              ▼
-                     Audio File List            collectSupportedAudioFiles()
-                              │
-                              ▼
-                     Random Selection           math.random(#files)
-                              │
-                              ▼
-                     REAPER Insert              insertMediaAtCursor()
-                              │
-                              ▼
-                          Media Item
+  InsertRandomSFX.lua            InsertRandomSFXAtMouse.lua     NextSample.lua / PreviousSample.lua
+  (standard action)              (Alt+click)                    (sample browsing)
+    selected track                 track under mouse               selected media item
+    + GetCursorPosition()          + GetSet_ArrangeView2(mouse x)  + item metadata (library, source)
+            \                              /                                |
+             v                            v                                 |
+      insertRandomForTrackAtPosition(track, position)          browseSample(direction)
+             │                            │                                 │
+             ▼                            ▼                                 ▼
+      category -> folder -> files -> random pick -> insert     library -> sorted files -> step -> replace source
+             │                                                              │
+             ▼                                                              ▼
+      item metadata + project state + edit cursor to item start     item metadata update (source)
 ```
 
-## Code layers
+## Core code layers
 
-There are two scripts:
-
-- **`scripts/InsertRandomSFX.lua`** — the core module and standard action. It
-  holds all configuration, pure helpers and REAPER helpers, and exposes the
-  shared `insertRandomForTrackAtPosition(track, position)`.
-- **`scripts/InsertRandomSFXAtMouse.lua`** — a thin wrapper. It resolves the
-  track under the mouse and the time under the mouse, selects the track, and
-  calls the shared function. It contains no category/folder/undo logic.
-
-`InsertRandomSFX.lua` is split into three sections, in this order:
+`scripts/InsertRandomSFX.lua` is organised as:
 
 ### 1. Configuration (`CONFIG`)
 
-The only place users edit. It holds:
+The only place users edit:
 
-- `category_folders` — the **track name → folder** map. This is the single
-  source of truth for routing. The key is the REAPER track name (the category);
-  the value is the folder on disk. The default configuration defines five
-  categories:
+- `category_folders` — the **track name → folder** map (single source of truth
+  for routing). The key is the REAPER track name (the category); the value is
+  the folder on disk:
 
   ```lua
   category_folders = {
@@ -70,104 +57,135 @@ The only place users edit. It holds:
   }
   ```
 
-  For example, `gun = "D:/SFX/Guns"` means a track named `gun` uses audio from
-  `D:/SFX/Guns`. The paths are placeholders for the user to change.
 - `supported_extensions` — which file extensions count as importable audio.
-- `undo_prefix` — prefix for the undo description.
+- `undo_prefix` — prefix for the insert undo description.
 
 No business logic mentions any specific category name; categories exist only as
-rows in this table. Adding one is a configuration change.
+rows in this table.
 
-### 2. Pure helpers (no REAPER API)
+### 2. Stored-state identifiers
 
-Deterministic, side-effect-free functions that can run outside REAPER and are
-covered by `tests/run_tests.lua`:
+- `ITEM_META` — the `P_EXT:` keys written on each inserted item:
+  `category`, `library`, `source`.
+- `PROJ_STATE_SECTION` — the `SetProjExtState` section used for the
+  "avoid immediate repeat" memory (one key per category).
+- `BROWSE_NEXT` / `BROWSE_PREVIOUS` — the browsing directions.
+
+### 3. Pure helpers (no REAPER API)
+
+Deterministic, side-effect-free functions covered by `tests/run_tests.lua`:
 
 | Function | Responsibility |
 | --- | --- |
 | `getExtension(fileName)` | lower-cased extension without the dot |
 | `isSupportedAudioFile(fileName)` | extension is in `supported_extensions` |
 | `joinPath(folder, name)` | separator-aware path joining |
+| `canonicalizePath(path)` | forward slashes, collapsed separators, no trailing slash |
+| `pathsEqual(a, b)` | case-insensitive comparison of canonical paths |
+| `sortPaths(paths)` | deterministic, case-insensitive, raw tie-break |
+| `findPathIndex(paths, target)` | 1-based index by canonical comparison, or nil |
+| `chooseRandomIndex(count, excludeIndex)` | uniform random index, avoiding one excluded index |
+| `browseIndex(index, count, direction)` | step forward/backward with wrap-around |
 | `resolveCategoryFromTrackName(trackName)` | track name → category key (case-insensitive, exact) |
-| `collectSupportedAudioFiles(folder, [enumerate])` | folder listing → supported full paths |
+| `collectSupportedAudioFiles(folder, [enumerate])` | folder listing → supported full paths, **sorted** |
 | `directoryExists(path, [enumerateFiles], [enumerateSubdirs])` | best-effort folder-existence check |
 | `capitalize(word)` | used for the undo description |
 | `supportedFormatList()` | human-readable format list for errors |
 | `configuredCategories()` | sorted category keys for errors |
 
 The directory/file enumerators are **injectable** (they default to the REAPER
-API). That is what makes these functions testable without REAPER.
+API), which is what makes these functions testable without REAPER.
 
-### 3. REAPER API helpers
+### 4. REAPER API helpers
 
 A thin boundary around `reaper.*`:
 
 | Function | Responsibility |
 | --- | --- |
-| `getSelectedTrackOrNil()` | first selected track, or nil |
+| `getSelectedTrackOrNil()` / `getSelectedMediaItemOrNil()` | first selected track/item, or nil |
 | `getTrackName(track)` | track name (empty string if unnamed) |
 | `showError(message)` | modal error dialog |
-| `insertMediaAtCursor(track, filePath, pos)` | insert via REAPER, pin to `pos` |
+| `getItemMetadata` / `setItemMetadata` / `writeItemMetadata` | item `P_EXT:` string state |
+| `getProjectState` / `setProjectState` | project-scoped string state (`SetProjExtState`) |
+| `insertMediaOnTrack(track, filePath, pos)` | insert via REAPER, pin to `pos`, return the new item |
+| `setEditCursorToItemStart(item)` | `SetEditCurPos` to the item's `D_POSITION` |
+| `replaceTakeSource(take, newPath)` | swap the take's source, return its natural length |
 | `seedRandom()` | seed the RNG with time + high-resolution time |
-| `insertRandomForTrackAtPosition(track, position)` | **shared**: resolve category → folder → files → random pick → insert (single undo) → errors |
+
+### 5. Shared operations
+
+- `insertRandomForTrackAtPosition(track, position)` — resolve category → folder
+  → files → random pick (avoiding the immediate previous pick) → insert →
+  write metadata → remember pick → move edit cursor to item start. One undo
+  step (insert + metadata).
+- `browseSample(direction)` — read the selected item's metadata → resolve the
+  library → find the current source → step (wrap-around) → replace the take
+  source → keep exact position → set natural length → update metadata. One undo
+  step.
 
 `main()` (standard action) validates that a track is selected and calls
 `insertRandomForTrackAtPosition(track, reaper.GetCursorPosition())`.
 
-### 4. Mouse wrapper (`InsertRandomSFXAtMouse.lua`)
-
-A thin script that:
-
-1. `x, y = reaper.GetMousePosition()`
-2. `track = reaper.GetTrackFromPoint(x, y)` (error if none)
-3. `position = reaper.GetSet_ArrangeView2(0, false, x, x + 1)` — native
-   screen-X → project-time conversion (no manual pixel math, no SWS)
-4. `reaper.SetOnlyTrackSelected(track)` — because `InsertMedia(file, 0)`
-   inserts on the current track
-5. calls `insertRandomForTrackAtPosition(track, position)`
-
-It never calls `SetEditCurPos`, so the edit cursor is preserved. It loads the
-core module with `loadfile`, setting `_G.SFX_LOAD_AS_MODULE` so the module
-returns its functions instead of running `main()`. The two scripts must stay in
-the same directory.
-
 ## Insertion details
 
-Insertion uses `reaper.InsertMedia(file, 0)` (`0` = add to current track). This
-lets REAPER create the media source and determine its properties — the script
-never decodes audio.
+Insertion uses `reaper.InsertMedia(file, 0)` (`0` = add to current track), so
+REAPER creates the media source and determines its properties — the script never
+decodes audio. The new item(s) are found by diffing the track's item pointers
+before/after the call, then pinned to `D_POSITION = position` (edit cursor for
+the standard action, mouse time for the wrapper).
 
-Because `InsertMedia` ultimately follows REAPER's import behaviour, the item(s)
-it creates are then explicitly set to `D_POSITION = position`, where `position`
-is supplied by the caller (the edit cursor for the standard action, the mouse
-time for the Alt+click wrapper). The script detects the new item(s) by diffing
-the track's item pointers before and after the call. This guarantees the
-requested position regardless of any REAPER preference about where inserted
-media lands, and gives a reliable success/failure signal.
-
-The whole insertion is wrapped in:
+The insert **and** the metadata write are wrapped in one undo block:
 
 ```lua
 reaper.Undo_BeginBlock()
--- insert
+-- insert + write P_EXT: metadata
 reaper.Undo_EndBlock(undo_description, -1)
 ```
 
-so it is a single undo step.
+After that (outside undo), the previous pick is stored in project state and the
+edit cursor is moved to the item's `D_POSITION`. Neither is an undo point.
+
+## Item metadata and project state
+
+- **Item metadata** uses `GetSetMediaItemInfo_String(item, "P_EXT:<key>", …)`.
+  It is item-local and, importantly, part of REAPER's undo history, so it lives
+  inside the undo block.
+- **Project state** uses `SetProjExtState` / `GetProjExtState`. It is outside
+  undo history and is saved in the `.RPP`, so it survives separate script runs
+  and is scoped to the project. It stores the last random pick **per category**.
+
+Paths are canonicalized before storage and comparison, so `D:\SFX\Guns\a.wav`
+and `d:/sfx/guns/A.WAV` are treated as the same file.
+
+## Source replacement details
+
+`browseSample` replaces the active take's source:
+
+```lua
+local newSource = reaper.PCM_Source_CreateFromFile(newPath)
+local oldSource = reaper.GetMediaItemTake_Source(take)
+reaper.SetMediaItemTake_Source(take, newSource)   -- take now owns newSource
+reaper.PCM_Source_Destroy(oldSource)              -- we own the old source
+```
+
+`SetMediaItemTake_Source` does **not** destroy the old source, so the script
+destroys it. To make the new source define the item's natural length, the take's
+`D_STARTOFFS` is reset to 0 and `D_PLAYRATE` to 1, then the item's `D_LENGTH` is
+set to `GetMediaSourceLength(newSource)`. The item's exact `D_POSITION` is
+re-asserted; volume, pan and mute are untouched.
 
 ## Extension points
 
-These are the seams intended for future growth. They are intentionally small.
-
 | Future feature | Touch point |
 | --- | --- |
-| Additional categories (beyond the five defaults) | add rows to `CONFIG.category_folders` |
+| Additional categories | add rows to `CONFIG.category_folders` |
 | Fuzzy/partial track matching | `resolveCategoryFromTrackName` |
-| Config file instead of inline table | replace the literal `CONFIG` table; the rest is unchanged |
-| Avoid immediate repeats / weighting | the selection step in `insertRandomForTrackAtPosition`; add a pure `pickRandomFile(files, history)` helper |
-| Recursive subfolders | `collectSupportedAudioFiles` (add subdir traversal) |
-| Random gain/pitch/pan | a new step after `insertMediaAtCursor` |
-| Additional mouse contexts (item edge/fade, bottom half) | REAPER-side wiring only; the wrapper already works from mouse position |
+| Config file instead of inline table | replace the literal `CONFIG` table |
+| Long-term history / weighting | the selection step in `insertRandomForTrackAtPosition`; add a pure helper |
+| Recursive subfolders | `collectSupportedAudioFiles` |
+| Item-under-mouse browsing | resolve the item in `browseSample` (or a wrapper) instead of the selected item |
+| Random gain/pitch/pan | a new step after `insertMediaOnTrack` |
+| Additional mouse contexts (item edge/fade, bottom half) | REAPER-side wiring only |
 | Different formats | `CONFIG.supported_extensions` |
 
 ## Non-goals (for now)
