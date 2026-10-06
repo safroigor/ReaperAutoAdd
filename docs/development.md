@@ -204,11 +204,17 @@ Additional checks:
 - Alt+clicking an item does **not** require or change the item selection.
 - One Alt+click browse is a **single** undo step; hit-testing/selection adds no
   undo point.
-- **Source-replacement regression:** after browsing, the item's waveform and
-  playback reflect the new file, not just its length. `SetMediaItemTake_Source`
-  alone is not enough — the script must call `reaper.UpdateItemInProject(item)`
-  so REAPER refreshes its cached item state, otherwise the length changes while
-  the old source keeps playing.
+- **Source-replacement regression:** after browsing, the item's **waveform and
+  playback** reflect the new file, not just its length. `SetMediaItemTake_Source`
+  alone leaves REAPER's cached item/peak state on the previous source, so the
+  script marks the item dirty (`reaper.MarkTrackItemsDirty`), calls
+  `reaper.UpdateItemInProject` and `reaper.UpdateArrange`. The old `PCM_source`
+  is intentionally **not** destroyed (REAPER may still reference it; freeing it
+  corrupted playback in testing).
+- **Playback continuity:** play through an inserted item, then play through a
+  browsed/replaced item, move the cursor past it and play again — playback must
+  continue normally and not stop immediately. Repeat the replacement several
+  times.
 - One-file library → Alt+click leaves the item unchanged (safe no-op).
 - Stored library missing / current source not in library → clear message,
   nothing changed.

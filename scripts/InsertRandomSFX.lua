@@ -367,26 +367,28 @@ local function setEditCursorToItemStart(item)
     return pos
 end
 
--- Replace `take`'s media source with the file at `newPath`.
--- Returns (true, naturalLength, oldSource) on success; the caller must destroy
--- `oldSource` afterwards (SetMediaItemTake_Source does not). The freshly
--- created new source becomes owned by the take.
+-- Replace `take`'s media source with the file at `newPath`, returning the new
+-- source's natural length (or nil on failure).
+--
+-- Ownership: SetMediaItemTake_Source transfers the NEW source to the take; if
+-- it fails the new source is not attached and we free it. The OLD source is
+-- deliberately left alone: REAPER may still hold internal references to it
+-- (audio engine, peak cache, undo), and freeing it here was observed to corrupt
+-- playback and leave a stale waveform. REAPER reclaims it when it is safe to.
 local function replaceTakeSource(take, newPath)
     local newSource = reaper.PCM_Source_CreateFromFile(newPath)
-    if not newSource then return false end
+    if not newSource then return nil end
 
-    local oldSource = reaper.GetMediaItemTake_Source(take)
     if not reaper.SetMediaItemTake_Source(take, newSource) then
-        reaper.PCM_Source_Destroy(newSource)
-        return false
+        reaper.PCM_Source_Destroy(newSource) -- not attached: free our own source
+        return nil
     end
 
     -- Natural length, no stretch and no offset: the new source defines the
     -- item, we do not preserve the previous D_LENGTH.
     reaper.SetMediaItemTakeInfo_Value(take, "D_STARTOFFS", 0)
     reaper.SetMediaItemTakeInfo_Value(take, "D_PLAYRATE", 1)
-    local length = reaper.GetMediaSourceLength(newSource)
-    return true, length, oldSource
+    return reaper.GetMediaSourceLength(newSource)
 end
 
 local function seedRandom()
@@ -528,25 +530,22 @@ local function browseSample(item, direction)
         and "SFX: Next Sample" or "SFX: Previous Sample"
 
     reaper.Undo_BeginBlock()
-    local ok, length, oldSource = replaceTakeSource(take, newPath)
-    if ok then
+    local length = replaceTakeSource(take, newPath)
+    if length then
         -- Keep the exact start; let the new source define the length.
         reaper.SetMediaItemInfo_Value(item, "D_POSITION", position)
         reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
         setItemMetadata(item, ITEM_META.source, canonicalizePath(newPath))
-        -- SetMediaItemTake_Source swaps the take's source, but REAPER keeps a
-        -- cached item state. Without this refresh the item keeps playing the
-        -- previous source even though D_LENGTH was already updated.
+        -- SetMediaItemTake_Source swaps the take's source, but REAPER keeps
+        -- cached item/peak state. Mark the item dirty so its waveform is
+        -- rebuilt from the new source, refresh the item state, then redraw.
+        reaper.MarkTrackItemsDirty(nil, item)
         reaper.UpdateItemInProject(item)
         reaper.UpdateArrange()
-        -- The item no longer references the old source, so it is safe to free.
-        if oldSource then
-            reaper.PCM_Source_Destroy(oldSource)
-        end
     end
     reaper.Undo_EndBlock(description, -1)
 
-    if not ok then
+    if not length then
         showError("Failed to replace the source:\n" .. newPath)
         return false
     end
