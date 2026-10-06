@@ -11,11 +11,20 @@
   category's configured folder, and inserts it as a normal media item at the
   current edit cursor position.
 
-  Workflow
-  --------
+  Two workflows, one implementation
+  ---------------------------------
+  Standard action (this file, run directly):
     1. Select a track named after a configured category (e.g. `transition`).
     2. Put the edit cursor where you want the sound.
     3. Run this action (assign a shortcut / toolbar button if you like).
+
+  Fast mouse workflow (see InsertRandomSFXAtMouse.lua):
+    Move the mouse over the Arrange View at the desired track/time and press
+    Alt+left-click. The track/time under the mouse are used and the edit
+    cursor is left untouched.
+
+  Both call the shared `insertRandomForTrackAtPosition(track, position)`
+  below, so they can never drift apart.
 
   Design
   ------
@@ -23,7 +32,7 @@
   later without touching the logic:
 
       track name -> category -> configured folder -> audio files
-                 -> random pick -> media item at cursor
+                 -> random pick -> media item at position
 
   The pure logic (no REAPER API) is isolated in the "PURE HELPERS" section so
   it can be unit-tested outside REAPER. See docs/architecture.md.
@@ -241,19 +250,18 @@ local function seedRandom()
 end
 
 -- =====================================================================
--- MAIN
+-- SHARED INSERTION LOGIC
 -- =====================================================================
 
-local function main()
-    -- 1. A track must be selected.
-    local track = getSelectedTrackOrNil()
-    if not track then
-        return showError("No track selected.\n\n"
-            .. "Select a track named after a configured category "
-            .. "(see CONFIG.category_folders) first.")
-    end
-
-    -- 2. Its name must resolve to a configured category.
+-- Resolve `track`'s category, pick a random file from that category's folder
+-- and insert it on `track` at `position`. Returns true on success. Errors are
+-- reported to the user; success is silent.
+--
+-- This is the single implementation shared by both entry points:
+--   * InsertRandomSFX.lua        -> selected track + current edit cursor
+--   * InsertRandomSFXAtMouse.lua -> track + time under the mouse
+local function insertRandomForTrackAtPosition(track, position)
+    -- 1. The track's name must resolve to a configured category.
     local trackName = getTrackName(track)
     local category = resolveCategoryFromTrackName(trackName)
     if not category then
@@ -265,7 +273,7 @@ local function main()
             table.concat(configuredCategories(), ", ")))
     end
 
-    -- 3. The category must point at an existing folder.
+    -- 2. The category must point at an existing folder.
     local folder = CONFIG.category_folders[category]
     if not directoryExists(folder) then
         return showError(string.format(
@@ -274,7 +282,7 @@ local function main()
             category, folder))
     end
 
-    -- 4. That folder must contain at least one supported audio file.
+    -- 3. That folder must contain at least one supported audio file.
     local files = collectSupportedAudioFiles(folder)
     if #files == 0 then
         return showError(string.format(
@@ -284,28 +292,45 @@ local function main()
             category, folder, supportedFormatList()))
     end
 
-    -- 5. Pick one at random and insert it at the edit cursor.
+    -- 4. Pick one at random and insert it at `position`.
     seedRandom()
     local filePath = files[math.random(#files)]
-    local pos = reaper.GetCursorPosition()
 
     reaper.Undo_BeginBlock()
-    local ok = insertMediaAtCursor(track, filePath, pos)
+    local ok = insertMediaAtCursor(track, filePath, position)
     reaper.Undo_EndBlock(CONFIG.undo_prefix .. capitalize(category), -1)
 
-    -- 6. Only complain on failure; success stays silent and instant.
+    -- 5. Only complain on failure; success stays silent and instant.
     if not ok then
-        showError("Failed to insert the selected file:\n" .. filePath)
+        return showError("Failed to insert the selected file:\n" .. filePath)
     end
+    return true
 end
 
 -- =====================================================================
--- ENTRY POINT / TEST HOOK
+-- MAIN (standard action: selected track + current edit cursor)
 -- =====================================================================
 
--- The automated tests load this file with _G.SFX_TEST_MODE set and inspect
--- the returned table. Running normally inside REAPER executes main().
-if not _G.SFX_TEST_MODE then
+local function main()
+    -- A track must be selected.
+    local track = getSelectedTrackOrNil()
+    if not track then
+        return showError("No track selected.\n\n"
+            .. "Select a track named after a configured category "
+            .. "(see CONFIG.category_folders) first.")
+    end
+
+    insertRandomForTrackAtPosition(track, reaper.GetCursorPosition())
+end
+
+-- =====================================================================
+-- ENTRY POINT / MODULE HOOK
+-- =====================================================================
+
+-- When this file is loaded as a module -- by the automated tests, or by
+-- InsertRandomSFXAtMouse.lua -- it must NOT run main(); it only returns its
+-- functions. Running it normally inside REAPER executes main().
+if not _G.SFX_LOAD_AS_MODULE then
     main()
 end
 
@@ -320,4 +345,5 @@ return {
     capitalize = capitalize,
     supportedFormatList = supportedFormatList,
     configuredCategories = configuredCategories,
+    insertRandomForTrackAtPosition = insertRandomForTrackAtPosition,
 }

@@ -19,17 +19,32 @@ No other dependencies. Do not add any.
 ## Repository layout
 
 ```text
-scripts/InsertRandomSFX.lua   the runtime ReaScript (single file)
-tests/run_tests.lua           unit tests for the pure logic
-docs/                         architecture, development, roadmap
+scripts/InsertRandomSFX.lua        core module + standard action
+scripts/InsertRandomSFXAtMouse.lua Alt+click wrapper (loads the core module)
+tests/run_tests.lua                unit tests for the pure logic
+docs/                              architecture, development, roadmap
 ```
 
-## Loading the script in REAPER
+## Loading the scripts in REAPER
 
 1. Open the repository in an editor of your choice.
 2. In REAPER: **Actions → Show action list… → New action → Load ReaScript…**
-3. Choose `scripts/InsertRandomSFX.lua`.
-4. Optionally assign a keyboard shortcut (right-click the action).
+   and choose `scripts/InsertRandomSFX.lua`.
+3. Repeat for `scripts/InsertRandomSFXAtMouse.lua`. Keep both files in the same
+   folder — the wrapper loads the core module from its own directory.
+4. Optionally assign a keyboard shortcut to the standard action.
+
+### Mouse-modifier setup for the Alt+click workflow
+
+In **Preferences → Editing Behavior → Mouse Modifiers**, assign
+`InsertRandomSFXAtMouse.lua` to **both**:
+
+- Context **Track**, behavior **left click**, modifier **Alt**
+- Context **Media item**, behavior **left click**, modifier **Alt**
+
+Two bindings are required because REAPER hit-tests left clicks differently over
+empty track lane vs. over a media item. Item edge / fade / "Media item bottom
+half" are separate contexts and are intentionally not bound yet.
 
 ### The fast edit loop
 
@@ -47,16 +62,19 @@ From the repository root:
 lua tests/run_tests.lua
 ```
 
-This loads `scripts/InsertRandomSFX.lua` in a special test mode
-(`_G.SFX_TEST_MODE = true`), which makes the script return its pure helper table
-instead of executing `main()`. The tests cover extension parsing, format
-filtering, path joining, category resolution (including case-insensitivity),
-file listing with an injected fake enumerator, and folder-existence detection.
+This loads `scripts/InsertRandomSFX.lua` as a module
+(`_G.SFX_LOAD_AS_MODULE = true`), which makes it return its helper table instead
+of executing `main()`. The tests cover extension parsing, format filtering, path
+joining, category resolution (including case-insensitivity), file listing with an
+injected fake enumerator, folder-existence detection, and that the shared
+`insertRandomForTrackAtPosition` entry point is exported.
 
-Also worth running as a syntax gate:
+The mouse/time APIs cannot be unit-tested outside REAPER — they are covered by
+the manual test cases below. Also run the syntax gate on both scripts:
 
 ```sh
 luac -p scripts/InsertRandomSFX.lua
+luac -p scripts/InsertRandomSFXAtMouse.lua
 ```
 
 If you add pure logic, add tests for it. If a helper needs the REAPER API,
@@ -99,6 +117,32 @@ Additional checks worth doing once:
 - Run with a folder containing mixed-case extensions (`KICK.WAV`) → included.
 - Confirm a **single** undo entry named `Insert Random <Category>` (e.g.
   `Insert Random Gun`) appears in **Edit → Undo History**.
+
+## Fast mouse workflow (Alt+click) test cases
+
+These require the mouse modifiers to be configured first (see above). They
+cannot be automated outside REAPER.
+
+| # | Scenario | Setup / action | Expected |
+| --- | --- | --- | --- |
+| A | Empty track lane | Hover an empty spot on a `transition` track, Alt+left-click | Random transition file inserted at the mouse time on that track |
+| B | Existing media item | Hover over an existing item, Alt+left-click | Random file inserted at the mouse time on that item's track (existing item untouched) |
+| C | Edit cursor | Note `Edit cursor` position, Alt+click, note it again | **Identical** before and after; only the item is added |
+| D | Multiple tracks | Select track A, then Alt+click a different track B | SFX uses track B's category and lands on B, not A |
+| E | Zoom / scroll | Repeat A at several horizontal zoom levels and scroll positions | Insert time always matches the mouse X exactly |
+| F | Undo | Alt+click, then `Ctrl+Z` once | The inserted item is removed in a single undo; edit cursor still unchanged |
+| G | Standard action regression | Select a `transition` track, place the cursor, run `InsertRandomSFX.lua` | Behaves exactly as before (selected track + edit cursor) |
+
+Additional mouse checks worth doing once:
+
+- Alt+click over a track whose name is not a configured category → clear
+  "not a supported category" dialog, nothing inserted.
+- Alt+click below the last track (no track under mouse) → clear
+  "No track under the mouse." dialog.
+- Confirm the Alt+click insertion is a **single** undo entry and that selecting
+  the track under the mouse did **not** create its own undo step.
+- Note the known gap: Alt+click on an item **edge** or **fade** may not fire
+  (separate REAPER context). This is expected for now.
 
 ## Reporting a change
 

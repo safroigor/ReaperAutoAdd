@@ -2,7 +2,7 @@
   run_tests.lua -- unit tests for the pure logic in InsertRandomSFX.lua.
 
   These tests never call REAPER. The script exposes its pure helpers when it
-  is loaded with _G.SFX_TEST_MODE set (see the TEST HOOK section of the
+  is loaded with _G.SFX_LOAD_AS_MODULE set (see the MODULE HOOK section of the
   script).
 
   Run from the repository root with any Lua 5.3+ interpreter:
@@ -12,7 +12,7 @@
   REAPER itself ships Lua 5.4, so the syntax used here is safe there too.
 ]]
 
-_G.SFX_TEST_MODE = true
+_G.SFX_LOAD_AS_MODULE = true
 
 -- Locate the script relative to this test file (or the current directory).
 local function locateScript()
@@ -218,6 +218,16 @@ for _, category in ipairs(CATEGORIES) do
     check("config: " .. category .. " has a folder",
         type(folder) == "string" and folder ~= "")
 end
+
+-- ---------------------------------------------------------------------
+-- Module surface
+-- ---------------------------------------------------------------------
+
+-- The mouse wrapper calls this shared function; it must be exported and must
+-- not run main() when the module is loaded. (Its body uses the REAPER API and
+-- is therefore only exercised manually inside REAPER.)
+check("module exports insertRandomForTrackAtPosition",
+    type(Sfx.insertRandomForTrackAtPosition) == "function")
 
 -- ---------------------------------------------------------------------
 -- Summary

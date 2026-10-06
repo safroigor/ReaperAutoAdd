@@ -1,25 +1,27 @@
 # REAPER Random SFX Inserter
 
 A tiny REAPER ReaScript that drops a random sound effect onto a track, chosen
-by the track's name, at the edit cursor.
+by the track's name, either at the edit cursor or directly at the mouse.
 
-> **Status: Phase 1.** Five categories (`transition`, `gun`, `impact`,
-> `whoosh`, `footstep`) are implemented. See
+> **Status: Phase 3 (fast interaction) in progress.** Five categories
+> (`transition`, `gun`, `impact`, `whoosh`, `footstep`) and two workflows —
+> standard action and **Alt+click in the Arrange View** — are implemented. See
 > [Current status](#current-status) and the [roadmap](docs/roadmap.md).
 
 ## What it does
 
 In a sound-design session you often know *what* you want ("a transition here")
-but not *which* file. Instead of opening a browser and auditioning, you put the
-edit cursor where the sound belongs and press a key. The script looks at the
-selected track's name, treats it as a **category**, finds that category's
-folder, picks a random supported audio file, and inserts it as a normal REAPER
-media item at the cursor.
+but not *which* file. Instead of opening a browser and auditioning, you point at
+where the sound belongs and press a key or Alt+click. The script looks at the
+track's name, treats it as a **category**, finds that category's folder, picks a
+random supported audio file, and inserts it as a normal REAPER media item.
 
-The flow is:
+There are two workflows, sharing one implementation.
+
+**Standard action** — selected track + edit cursor:
 
 ```text
-REAPER track name
+selected track name
        ↓
 category_folders lookup
        ↓
@@ -28,6 +30,20 @@ configured folder
 random audio file
        ↓
 insert at edit cursor
+```
+
+**Fast mouse workflow** — track + time under the mouse, edit cursor untouched:
+
+```text
+mouse position in the Arrange View
+       ↓
+track under mouse  +  time under mouse (from mouse X)
+       ↓
+category_folders lookup  ->  configured folder
+       ↓
+random audio file
+       ↓
+insert at the mouse time on the mouse track
 ```
 
 Several categories ship out of the box:
@@ -45,15 +61,16 @@ Adding more categories is a configuration change, not a rewrite. See
 
 ## Current status
 
-This is **Phase 1** of the project. It is intentionally small and
-dependency-free:
+This is an intentionally small, dependency-free project:
 
 - ✅ Five categories: `transition`, `gun`, `impact`, `whoosh`, `footstep`.
 - ✅ Case-insensitive track-name matching.
 - ✅ Random selection from a configured folder.
-- ✅ Inserts at the edit cursor as a single undo step.
+- ✅ Standard action: selected track + edit cursor, single undo step.
+- ✅ Fast mouse workflow: **Alt+left-click** in the Arrange View inserts at the
+  mouse time on the track under the mouse, **without moving the edit cursor**.
 - ✅ Clear error messages, silent success.
-- ❌ No GUI, no database, no mouse modifiers, no advanced randomisation.
+- ❌ No GUI, no database, no transient detection, no advanced randomisation.
   (Those are future phases — see [`docs/roadmap.md`](docs/roadmap.md).)
 
 ## Requirements
@@ -65,16 +82,23 @@ dependency-free:
 
 ## Installation
 
+Two scripts are provided. Keep them **in the same folder** (the mouse wrapper
+loads `InsertRandomSFX.lua` from its own directory).
+
 1. In REAPER, open **Actions → Show action list…**
-2. Click **New action → Load ReaScript…**
-3. Select `scripts/InsertRandomSFX.lua` from this repository.
-4. (Optional but recommended) Right-click the new action and choose
-   **Duplicate**/*Set shortcut* to bind a key or add it to a toolbar.
+2. Click **New action → Load ReaScript…** and select
+   `scripts/InsertRandomSFX.lua` (the standard action).
+3. Click **New action → Load ReaScript…** again and select
+   `scripts/InsertRandomSFXAtMouse.lua` (the Alt+click workflow).
+4. (Optional) Right-click the standard action and assign a keyboard shortcut or
+   toolbar button.
+5. For the Alt+click workflow, configure the mouse modifiers (see
+   [Fast mouse workflow](#fast-mouse-workflow-altclick)).
 
-That's it — the script is a single file and has no dependencies.
+Both scripts have no dependencies; Lua is embedded in REAPER.
 
-> Tip: REAPER's action list can store the script wherever you keep your
-> ReaScripts. If you edit the file later, reload it from the action list (or use
+> Tip: REAPER's action list can store the scripts wherever you keep your
+> ReaScripts. If you edit a file later, reload it from the action list (or use
 > `Ctrl+S` in the built-in editor if you open it there).
 
 ## Configuration
@@ -124,28 +148,58 @@ them.
 
 ## Usage
 
-The workflow:
+Both workflows share the same category configuration. Name a track after a
+configured category (`transition`, `gun`, `impact`, `whoosh`, `footstep`, or one
+you added).
 
-1. Create or select a track and name it after a configured category
-   (`transition`, `gun`, `impact`, `whoosh`, `footstep`, or one you added).
-2. Select that track (click it).
-3. Put the edit cursor where you want the sound.
-4. Run the action (shortcut or toolbar).
-5. A randomly chosen supported audio file from that category's folder is
-   inserted at the cursor.
+### Standard action (selected track + edit cursor)
+
+1. Select the track.
+2. Put the edit cursor where you want the sound.
+3. Run the `InsertRandomSFX.lua` action (shortcut or toolbar).
+4. A random supported audio file from that category's folder is inserted at the
+   cursor.
+
+### Fast mouse workflow (Alt+click)
+
+This is the fastest way to work: never leave the Arrange View.
+
+1. Move the mouse over the target track at the exact time you want the sound.
+2. **Alt+left-click.**
+
+The script resolves the track under the mouse and the project time under the
+mouse (from the mouse's X position), picks a random file for that track's
+category, and inserts it there. **The edit cursor is not moved.**
+
+One-time mouse-modifier setup (required), in
+**Preferences → Editing Behavior → Mouse Modifiers**:
+
+| Context | Behavior | Modifier | Action |
+| --- | --- | --- | --- |
+| **Track** | left click | Alt | `InsertRandomSFXAtMouse.lua` |
+| **Media item** | left click | Alt | `InsertRandomSFXAtMouse.lua` |
+
+Both contexts are required because REAPER hit-tests left clicks differently:
+empty track lane uses the **Track** context, while a click over a media item
+uses the **Media item** context. Assigning the same script to both makes
+Alt+click behave identically in either case.
+
+Selecting the track under the mouse is part of this workflow (the importer
+inserts on the current track). That selection change is intentional and is not
+an undo step.
 
 For example, a track named `impact` pulls a random file from the folder mapped
 to `impact`; a track named `whoosh` pulls from the `whoosh` folder.
 
-The script does **not** move the edit cursor after insertion, and success is
-silent (no dialog). Nothing is shown unless there is an error.
+Success is silent (no dialog); nothing is shown unless there is an error.
 
 Errors you may see:
 
 | Situation | Message |
 | --- | --- |
-| No track selected | "No track selected." |
-| Selected track isn't a known category | "Selected track is not a supported category." |
+| No track selected (standard action) | "No track selected." |
+| No track under the mouse (Alt+click) | "No track under the mouse." |
+| Track isn't a known category | "Selected track is not a supported category." |
 | Folder doesn't exist | "The <category> folder does not exist: …" |
 | Folder has no supported audio | "No supported audio files found …" |
 | Insertion failed | "Failed to insert the selected file: …" |
@@ -159,7 +213,11 @@ Deliberately **not** implemented yet:
 - No subfolder scanning.
 - Plain uniform random selection (no "avoid immediate repeat", no weighting).
 - No GUI / settings dialog.
-- No mouse-modifier (Ctrl/Shift/Alt-click) interaction.
+- No transient detection, no snap-to-transient.
+- The Alt+click workflow covers the **Track** and **Media item** contexts only.
+  Alt+click on some item sub-contexts (item edge, fade/autocrossfade, and
+  "Media item bottom half" if enabled) may use a different REAPER mouse context
+  and may require an additional binding in a future task.
 - No random gain/pitch/pan, no fades, no trimming.
 - No project-specific or global config; the folder is edited in the script.
 - Folder existence is checked with REAPER's directory APIs (no direct
