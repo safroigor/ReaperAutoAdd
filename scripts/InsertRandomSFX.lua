@@ -1,0 +1,311 @@
+--[[
+  InsertRandomSFX.lua
+  -------------------
+  MVP ReaScript for the "REAPER Random SFX Inserter" project.
+
+  What it does
+  ------------
+  Takes the currently selected REAPER track, resolves its name to a
+  "category" (for the MVP the only category is `transition`), picks a random
+  supported audio file from that category's configured folder, and inserts it
+  as a normal media item at the current edit cursor position.
+
+  Workflow
+  --------
+    1. Select a track named `transition`.
+    2. Put the edit cursor where you want the sound.
+    3. Run this action (assign a shortcut / toolbar button if you like).
+
+  Design
+  ------
+  The mapping is deliberately data-driven so more categories can be added
+  later without touching the logic:
+
+      track name -> category -> configured folder -> audio files
+                 -> random pick -> media item at cursor
+
+  The pure logic (no REAPER API) is isolated in the "PURE HELPERS" section so
+  it can be unit-tested outside REAPER. See docs/architecture.md.
+
+  Configuration
+  -------------
+  Edit the CONFIG table below. See README.md > Configuration.
+]]
+
+-- =====================================================================
+-- CONFIGURATION -- this is the part users are expected to edit
+-- =====================================================================
+
+local CONFIG = {
+    -- Map: category name -> absolute folder holding that category's audio.
+    -- The category name is matched case-insensitively against the selected
+    -- track's name.
+    --
+    -- Use forward slashes "/" on every platform: they work on Windows,
+    -- macOS and Linux. On Windows, "C:/SFX/Transitions" is equivalent to
+    -- "C:\\SFX\\Transitions" but avoids Lua backslash escaping.
+    --
+    -- Add more categories by adding lines, e.g.:
+    --     gun    = "C:/SFX/Guns",
+    --     impact = "C:/SFX/Impacts",
+    category_folders = {
+        transition = "C:/SFX/Transitions",
+    },
+
+    -- File extensions treated as importable audio. Matched
+    -- case-insensitively. Do not include the leading dot.
+    supported_extensions = {
+        wav = true,
+        aif = true,
+        aiff = true,
+        flac = true,
+        ogg = true,
+        mp3 = true,
+    },
+
+    -- Prefix for the single REAPER undo description. The resolved category is
+    -- appended, e.g. "Insert Random Transition".
+    undo_prefix = "Insert Random ",
+}
+
+-- =====================================================================
+-- PURE HELPERS -- no REAPER API access, unit-tested in tests/run_tests.lua
+-- =====================================================================
+
+-- Lower-cased extension of a file name without the leading dot, or "".
+local function getExtension(fileName)
+    if type(fileName) ~= "string" then return "" end
+    local ext = fileName:match("%.([^./\\]+)$")
+    if not ext then return "" end
+    return ext:lower()
+end
+
+local function isSupportedAudioFile(fileName)
+    local ext = getExtension(fileName)
+    return ext ~= "" and CONFIG.supported_extensions[ext] == true
+end
+
+local function joinPath(folder, name)
+    if folder:sub(-1) == "/" or folder:sub(-1) == "\\" then
+        return folder .. name
+    end
+    return folder .. "/" .. name
+end
+
+-- Turn a track name into a configured category key, or nil.
+-- Case-insensitive and whitespace-tolerant. Exact match only for the MVP;
+-- this is isolated here so fuzzy/partial matching can be added later.
+local function resolveCategoryFromTrackName(trackName)
+    if type(trackName) ~= "string" then return nil end
+    local key = trackName:lower():match("^%s*(.-)%s*$")
+    if key ~= "" and CONFIG.category_folders[key] ~= nil then
+        return key
+    end
+    return nil
+end
+
+-- Collect the supported audio files in `folder`, returning full paths.
+-- `enumerate` is injectable for tests; it defaults to the REAPER API.
+-- reaper.EnumerateFiles lists files only (subdirectories come from
+-- EnumerateSubdirectories), so subfolders are ignored by construction and
+-- unsupported files are filtered out here.
+local function collectSupportedAudioFiles(folder, enumerate)
+    enumerate = enumerate or function(path, index)
+        return reaper.EnumerateFiles(path, index)
+    end
+    local files = {}
+    local index = 0
+    while true do
+        local name = enumerate(folder, index)
+        if not name then break end
+        if isSupportedAudioFile(name) then
+            files[#files + 1] = joinPath(folder, name)
+        end
+        index = index + 1
+    end
+    return files
+end
+
+-- Best-effort "does this directory exist" test using only REAPER APIs.
+-- EnumerateFiles returns nil for BOTH a missing and an empty folder, so to
+-- tell those apart we fall back to looking the folder up in its parent.
+local function directoryExists(path, enumerateFiles, enumerateSubdirs)
+    if type(path) ~= "string" or path == "" then return false end
+
+    enumerateFiles = enumerateFiles or function(p, i)
+        return reaper.EnumerateFiles(p, i)
+    end
+    enumerateSubdirs = enumerateSubdirs or function(p, i)
+        return reaper.EnumerateSubdirectories(p, i)
+    end
+
+    -- Fast path: a non-empty, existing folder.
+    if enumerateFiles(path, 0) ~= nil then return true end
+
+    -- Slow path: distinguish empty-but-existing from missing.
+    local normalized = path:gsub("\\", "/"):gsub("/+$", "")
+    local parent, name = normalized:match("^(.*/)([^/]+)$")
+    if not parent or name == "" then return false end
+
+    enumerateSubdirs(parent, -1) -- invalidate REAPER's directory cache
+    local index = 0
+    while true do
+        local sub = enumerateSubdirs(parent, index)
+        if not sub then break end
+        if sub:lower() == name:lower() then return true end
+        index = index + 1
+    end
+    return false
+end
+
+local function capitalize(word)
+    return (word:gsub("^%l", string.upper))
+end
+
+local function supportedFormatList()
+    local list = {}
+    for ext in pairs(CONFIG.supported_extensions) do
+        list[#list + 1] = "." .. ext
+    end
+    table.sort(list)
+    return table.concat(list, ", ")
+end
+
+local function configuredCategories()
+    local list = {}
+    for key in pairs(CONFIG.category_folders) do
+        list[#list + 1] = key
+    end
+    table.sort(list)
+    return list
+end
+
+-- =====================================================================
+-- REAPER API HELPERS -- kept small so the pure logic above stays testable
+-- =====================================================================
+
+local function getSelectedTrackOrNil()
+    if reaper.CountSelectedTracks(0) < 1 then return nil end
+    return reaper.GetSelectedTrack(0, 0)
+end
+
+local function getTrackName(track)
+    local _, name = reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "", false)
+    return name or ""
+end
+
+local function showError(message)
+    reaper.ShowMessageBox(message, "Random SFX Inserter", 0)
+end
+
+-- Insert `filePath` onto `track` at `pos`, returning true on success.
+-- Uses REAPER's own importer (InsertMedia) so REAPER determines the media
+-- source properties, then pins the newly created item(s) to the exact cursor
+-- position, independent of REAPER's insert-position preference.
+local function insertMediaAtCursor(track, filePath, pos)
+    local existing = {}
+    for i = 0, reaper.CountTrackMediaItems(track) - 1 do
+        existing[reaper.GetTrackMediaItem(track, i)] = true
+    end
+
+    reaper.InsertMedia(filePath, 0) -- 0 = add to current track
+
+    local inserted = false
+    for i = 0, reaper.CountTrackMediaItems(track) - 1 do
+        local item = reaper.GetTrackMediaItem(track, i)
+        if not existing[item] then
+            reaper.SetMediaItemInfo_Value(item, "D_POSITION", pos)
+            inserted = true
+        end
+    end
+    return inserted
+end
+
+local function seedRandom()
+    local seed = os.time()
+    if reaper.time_precise then
+        seed = seed + math.floor((reaper.time_precise() % 1) * 1000000)
+    end
+    math.randomseed(seed)
+end
+
+-- =====================================================================
+-- MAIN
+-- =====================================================================
+
+local function main()
+    -- 1. A track must be selected.
+    local track = getSelectedTrackOrNil()
+    if not track then
+        return showError("No track selected.\n\n"
+            .. "Select a track named 'transition' first.")
+    end
+
+    -- 2. Its name must resolve to a configured category.
+    local trackName = getTrackName(track)
+    local category = resolveCategoryFromTrackName(trackName)
+    if not category then
+        return showError(string.format(
+            "Selected track is not a supported category.\n\n"
+            .. "Selected track: %q\n"
+            .. "Supported track names: %s",
+            trackName,
+            table.concat(configuredCategories(), ", ")))
+    end
+
+    -- 3. The category must point at an existing folder.
+    local folder = CONFIG.category_folders[category]
+    if not directoryExists(folder) then
+        return showError(string.format(
+            "The %s folder does not exist:\n%s\n\n"
+            .. "Edit CONFIG.category_folders at the top of the script.",
+            category, folder))
+    end
+
+    -- 4. That folder must contain at least one supported audio file.
+    local files = collectSupportedAudioFiles(folder)
+    if #files == 0 then
+        return showError(string.format(
+            "No supported audio files found in the %s folder:\n%s\n\n"
+            .. "Supported formats: %s\n"
+            .. "Subfolders are not searched in this version.",
+            category, folder, supportedFormatList()))
+    end
+
+    -- 5. Pick one at random and insert it at the edit cursor.
+    seedRandom()
+    local filePath = files[math.random(#files)]
+    local pos = reaper.GetCursorPosition()
+
+    reaper.Undo_BeginBlock()
+    local ok = insertMediaAtCursor(track, filePath, pos)
+    reaper.Undo_EndBlock(CONFIG.undo_prefix .. capitalize(category), -1)
+
+    -- 6. Only complain on failure; success stays silent and instant.
+    if not ok then
+        showError("Failed to insert the selected file:\n" .. filePath)
+    end
+end
+
+-- =====================================================================
+-- ENTRY POINT / TEST HOOK
+-- =====================================================================
+
+-- The automated tests load this file with _G.SFX_TEST_MODE set and inspect
+-- the returned table. Running normally inside REAPER executes main().
+if not _G.SFX_TEST_MODE then
+    main()
+end
+
+return {
+    CONFIG = CONFIG,
+    getExtension = getExtension,
+    isSupportedAudioFile = isSupportedAudioFile,
+    joinPath = joinPath,
+    resolveCategoryFromTrackName = resolveCategoryFromTrackName,
+    collectSupportedAudioFiles = collectSupportedAudioFiles,
+    directoryExists = directoryExists,
+    capitalize = capitalize,
+    supportedFormatList = supportedFormatList,
+    configuredCategories = configuredCategories,
+}
