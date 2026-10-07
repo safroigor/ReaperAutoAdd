@@ -116,9 +116,10 @@ A thin boundary around `reaper.*`:
 | `showError(message)` | modal error dialog |
 | `getItemMetadata` / `setItemMetadata` / `writeItemMetadata` | item `P_EXT:` string state |
 | `getProjectState` / `setProjectState` | project-scoped string state (`SetProjExtState`) |
-| `insertMediaOnTrack(track, filePath, pos)` | create the item + take + PCM source at `pos`, return the new item |
+| `attachSource(take, filePath)` | attach the file as the take's source, return its natural length (shared by insert + browse) |
+| `insertMediaOnTrack(track, filePath, pos)` | create the item + take, attach the source at `pos`, return the new item |
+| `refreshItem(item)` | after a source swap: mark the item's track dirty, refresh the item, redraw |
 | `setEditCursorToItemStart(item)` | `SetEditCurPos` to the item's `D_POSITION` |
-| `replaceTakeSource(take, newPath)` | swap the take's source, return its natural length |
 | `seedRandom()` | seed the RNG with time + high-resolution time |
 
 ### 5. Shared operations
@@ -141,11 +142,12 @@ A thin boundary around `reaper.*`:
 ## Insertion details
 
 Insertion creates the item directly: `AddMediaItemToTrack` +
-`AddTakeToMediaItem` + `PCM_Source_CreateFromFile` + `SetMediaItemTake_Source`,
-then sets `D_POSITION = position` (edit cursor for the standard action, mouse
-time for the wrapper) and `D_LENGTH` from the source length. REAPER still
-creates and owns the media source and determines its properties — the script
-never decodes audio.
+`AddTakeToMediaItem`, then attaches the source through the shared
+`attachSource(take, filePath)` helper (`PCM_Source_CreateFromFile` +
+`SetMediaItemTake_Source`), and sets `D_POSITION = position` (edit cursor for the
+standard action, mouse time for the wrapper) and `D_LENGTH` from the source
+length. REAPER still creates and owns the media source and determines its
+properties — the script never decodes audio.
 
 The script deliberately does **not** use `reaper.InsertMedia`: it inserts at the
 edit cursor and then moves the edit/play cursor to the end of the inserted item,
@@ -177,16 +179,16 @@ and `d:/sfx/guns/A.WAV` are treated as the same file.
 
 ## Source replacement details
 
-`browseSample(item, direction)` replaces the active take's source:
+Both insertion and browsing create and attach sources through the **same**
+helper, `attachSource(take, filePath)`, so there is one source-construction path
+and one ownership rule. `browseSample(item, direction)` uses it on the item's
+existing take:
 
 ```lua
-local newSource = reaper.PCM_Source_CreateFromFile(newPath)
-reaper.SetMediaItemTake_Source(take, newSource)   -- take now owns newSource
--- reset D_STARTOFFS/D_PLAYRATE, set D_POSITION/D_LENGTH/metadata
-reaper.MarkTrackItemsDirty(reaper.GetMediaItem_Track(item), item) -- rebuild peaks
-reaper.UpdateItemInProject(item)                  -- refresh the item state
-reaper.UpdateArrange()                            -- redraw
--- the OLD source is intentionally NOT destroyed here (see below)
+local length = attachSource(take, newPath)  -- create + attach, natural length
+-- set D_LENGTH/metadata; the item's exact D_POSITION is left untouched
+refreshItem(item)                           -- peaks + item state + redraw
+-- the OLD source is intentionally NOT destroyed (see below)
 ```
 
 Ownership and lifetime:
@@ -201,16 +203,18 @@ Ownership and lifetime:
   refresh every internal reference, so freeing the old source was observed to
   corrupt playback and leave a stale waveform. REAPER reclaims it when safe.
 
-Refresh sequence: `SetMediaItemTake_Source` alone leaves REAPER's cached item
-state (playback and peaks) pointing at the previous source, so `D_LENGTH` would
-change while the old audio/waveform stayed. The script therefore marks the item
-dirty (`MarkTrackItemsDirty`, so peaks are rebuilt from the new source),
-refreshes the item (`UpdateItemInProject`) and redraws (`UpdateArrange`).
+Refresh: `SetMediaItemTake_Source` alone leaves REAPER's cached item state
+(playback and peaks) pointing at the previous source, so `D_LENGTH` would change
+while the old audio/waveform stayed. `refreshItem(item)` therefore marks the
+item's track dirty (`MarkTrackItemsDirty`, so peaks are rebuilt from the new
+source), refreshes the item (`UpdateItemInProject`) and redraws
+(`UpdateArrange`).
 
-To make the new source define the item's natural length, the take's
-`D_STARTOFFS` is reset to 0 and `D_PLAYRATE` to 1, then the item's `D_LENGTH` is
-set to `GetMediaSourceLength(newSource)`. The item's exact `D_POSITION` is
-re-asserted; volume, pan and mute are untouched.
+To make the new source define the item's natural length, `attachSource` resets
+the take's `D_STARTOFFS` to 0 and `D_PLAYRATE` to 1 and returns
+`GetMediaSourceLength(source)`; the caller sets the item's `D_LENGTH`. Browsing
+does not touch `D_POSITION`: `SetMediaItemTake_Source` does not move the item, so
+its exact start is preserved. Volume, pan and mute are untouched.
 
 ## Extension points
 

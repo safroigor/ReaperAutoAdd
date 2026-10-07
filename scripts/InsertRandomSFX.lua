@@ -337,6 +337,43 @@ local function setProjectState(key, value)
     reaper.SetProjExtState(0, PROJ_STATE_SECTION, key, value or "")
 end
 
+-- Attach the file at `filePath` as `take`'s media source and return the
+-- source's natural length (or nil on failure). Shared by insertion (a fresh
+-- take) and browsing (an existing take), so there is exactly one place that
+-- creates a source and one ownership rule.
+--
+-- Ownership: PCM_Source_CreateFromFile returns a source owned by the caller.
+-- SetMediaItemTake_Source transfers the NEW source to the take; if it fails the
+-- source is not attached and we free it. The OLD source is deliberately left
+-- alone: REAPER may still hold internal references to it (audio engine, peak
+-- cache, undo), and freeing it here was observed to corrupt playback and leave
+-- a stale waveform. REAPER reclaims it when it is safe to.
+--
+-- Natural length, no stretch and no offset: the source defines the item.
+local function attachSource(take, filePath)
+    local source = reaper.PCM_Source_CreateFromFile(filePath)
+    if not source then return nil end
+
+    if not reaper.SetMediaItemTake_Source(take, source) then
+        reaper.PCM_Source_Destroy(source) -- not attached: free our own source
+        return nil
+    end
+
+    reaper.SetMediaItemTakeInfo_Value(take, "D_STARTOFFS", 0)
+    reaper.SetMediaItemTakeInfo_Value(take, "D_PLAYRATE", 1)
+    return reaper.GetMediaSourceLength(source)
+end
+
+-- Refresh an item after its take's source changed. SetMediaItemTake_Source
+-- swaps the source, but REAPER keeps cached item/peak state: mark the item's
+-- track dirty so peaks are rebuilt from the new source, refresh the item state,
+-- then redraw.
+local function refreshItem(item)
+    reaper.MarkTrackItemsDirty(reaper.GetMediaItem_Track(item), item)
+    reaper.UpdateItemInProject(item)
+    reaper.UpdateArrange()
+end
+
 -- Create a media item for `filePath` on `track` at `pos`, returning the new
 -- item (or nil).
 --
@@ -347,26 +384,28 @@ end
 -- the mouse position). Creating the item at the exact position avoids all of
 -- that while REAPER still creates and owns the media source.
 local function insertMediaOnTrack(track, filePath, pos)
-    local source = reaper.PCM_Source_CreateFromFile(filePath)
-    if not source then return nil end
-
     local item = reaper.AddMediaItemToTrack(track)
     local take = item and reaper.AddTakeToMediaItem(item)
     if not take then
         if item then reaper.DeleteTrackMediaItem(track, item) end
-        reaper.PCM_Source_Destroy(source) -- not attached: free our own source
         return nil
     end
 
-    if not reaper.SetMediaItemTake_Source(take, source) then
+    local length = attachSource(take, filePath)
+    if not length then
         reaper.DeleteTrackMediaItem(track, item)
-        reaper.PCM_Source_Destroy(source)
         return nil
     end
 
     reaper.SetMediaItemInfo_Value(item, "D_POSITION", pos)
-    reaper.SetMediaItemInfo_Value(item, "D_LENGTH",
-        reaper.GetMediaSourceLength(source))
+    reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
+
+    -- A programmatically created item is not fully registered with REAPER's
+    -- project/arrange state until it is explicitly refreshed. Without this the
+    -- new item can act as a playback boundary (playback stops at its end);
+    -- UpdateItemInProject + UpdateArrange make the new item's state take effect.
+    reaper.UpdateItemInProject(item)
+    reaper.UpdateArrange()
     return item
 end
 
@@ -381,30 +420,6 @@ local function setEditCursorToItemStart(item)
     local pos = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
     reaper.SetEditCurPos(pos, false, false)
     return pos
-end
-
--- Replace `take`'s media source with the file at `newPath`, returning the new
--- source's natural length (or nil on failure).
---
--- Ownership: SetMediaItemTake_Source transfers the NEW source to the take; if
--- it fails the new source is not attached and we free it. The OLD source is
--- deliberately left alone: REAPER may still hold internal references to it
--- (audio engine, peak cache, undo), and freeing it here was observed to corrupt
--- playback and leave a stale waveform. REAPER reclaims it when it is safe to.
-local function replaceTakeSource(take, newPath)
-    local newSource = reaper.PCM_Source_CreateFromFile(newPath)
-    if not newSource then return nil end
-
-    if not reaper.SetMediaItemTake_Source(take, newSource) then
-        reaper.PCM_Source_Destroy(newSource) -- not attached: free our own source
-        return nil
-    end
-
-    -- Natural length, no stretch and no offset: the new source defines the
-    -- item, we do not preserve the previous D_LENGTH.
-    reaper.SetMediaItemTakeInfo_Value(take, "D_STARTOFFS", 0)
-    reaper.SetMediaItemTakeInfo_Value(take, "D_PLAYRATE", 1)
-    return reaper.GetMediaSourceLength(newSource)
 end
 
 local function seedRandom()
@@ -541,23 +556,27 @@ local function browseSample(item, direction)
 
     local newIndex = browseIndex(index, #files, direction)
     local newPath = files[newIndex]
-    local position = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
     local description = (direction == BROWSE_NEXT)
         and "SFX: Next Sample" or "SFX: Previous Sample"
 
     reaper.Undo_BeginBlock()
-    local length = replaceTakeSource(take, newPath)
+    -- The item is not moved: its exact start is preserved automatically and the
+    -- new source defines the natural length.
+    local length = attachSource(take, newPath)
     if length then
-        -- Keep the exact start; let the new source define the length.
-        reaper.SetMediaItemInfo_Value(item, "D_POSITION", position)
+        -- SetMediaItemTake_Source swaps the source but does not refresh the
+        -- take's cached peak/source state, so an EXISTING item keeps drawing the
+        -- previous waveform. PCM_Source_BuildPeaks(..., 0) on the source the take
+        -- actually points at re-associates REAPER's peak state with the newly
+        -- attached source. Mode 0 commonly reports "nothing to build" yet is
+        -- still what makes the change take effect, so no mode 1/2 loop is needed.
+        local attached = reaper.GetMediaItemTake_Source(take)
+        if attached then
+            reaper.PCM_Source_BuildPeaks(attached, 0)
+        end
         reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
         setItemMetadata(item, ITEM_META.source, canonicalizePath(newPath))
-        -- SetMediaItemTake_Source swaps the take's source, but REAPER keeps
-        -- cached item/peak state. Mark the item's track dirty so the waveform
-        -- is rebuilt from the new source, refresh the item state, then redraw.
-        reaper.MarkTrackItemsDirty(reaper.GetMediaItem_Track(item), item)
-        reaper.UpdateItemInProject(item)
-        reaper.UpdateArrange()
+        refreshItem(item)
     end
     reaper.Undo_EndBlock(description, -1)
 

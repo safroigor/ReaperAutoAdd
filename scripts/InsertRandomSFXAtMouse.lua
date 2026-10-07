@@ -131,14 +131,9 @@ local function main()
     -- the 1-pixel range at the mouse; the first return value is its start time.
     local position = reaper.GetSet_ArrangeView2(0, false, x, x + 1)
 
-    -- InsertMedia(file, 0) targets the "current" track, so select the track
-    -- under the mouse first. Selection is not an undoable operation, so it
-    -- does not add an undo point. The shared insertion logic then moves the
-    -- edit cursor onto the new item's start.
-    reaper.SetOnlyTrackSelected(track)
-
     -- Shared insertion logic: category -> folder -> random file -> insert at
-    -- the mouse-derived position.
+    -- the mouse-derived position. The track is passed explicitly, so no
+    -- selection change is needed.
     sfx.insertRandomForTrackAtPosition(track, position)
 end
 

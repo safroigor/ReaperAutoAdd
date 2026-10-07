@@ -64,8 +64,7 @@ Implemented:
   * over an existing SFX item → replace that item with the next sample from its
     stored library (target = item under the mouse, no selection needed).
   Uses only native APIs: `GetMousePosition`, `GetItemFromPoint`,
-  `GetTrackFromPoint`, `GetSet_ArrangeView2` (mouse X → project time),
-  `SetOnlyTrackSelected`.
+  `GetTrackFromPoint`, `GetSet_ArrangeView2` (mouse X → project time).
 - **Next / Previous Sample** actions (selected item) remain available; an
   optional Alt+mouse-wheel setup can drive them.
 - Implemented as thin wrappers that call the shared core, so the standard action

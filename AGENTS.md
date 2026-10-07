@@ -149,8 +149,8 @@ See `docs/architecture.md` for extension points.
   `reaper.EnumerateSubdirectories` instead of Lua's `io.popen`, which is
   platform-specific.
 - **Mouse placement uses native APIs only.** `GetMousePosition`,
-  `GetTrackFromPoint`, `GetSet_ArrangeView2` and `SetOnlyTrackSelected`. Do not
-  add SWS, js_ReaScriptAPI, or window-message hooks.
+  `GetTrackFromPoint` and `GetSet_ArrangeView2`. Do not add SWS,
+  js_ReaScriptAPI, or window-message hooks.
 
 ## 5. Coding rules
 

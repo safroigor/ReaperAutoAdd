@@ -205,9 +205,11 @@ Additional checks:
 - One Alt+click browse is a **single** undo step; hit-testing/selection adds no
   undo point.
 - **Source-replacement regression:** after browsing, the item's **waveform and
-  playback** must reflect the new file, not just its length.
-  `SetMediaItemTake_Source` alone leaves REAPER's cached item/peak state on the
-  previous source, so the script marks the item's track dirty
+  playback** must reflect the new file, not just its length. Source creation and
+  attachment are centralized in `attachSource(take, filePath)`; the post-swap
+  refresh is centralized in `refreshItem(item)`. `SetMediaItemTake_Source` alone
+  leaves REAPER's cached item/peak state on the previous source, so
+  `refreshItem` marks the item's track dirty
   (`reaper.MarkTrackItemsDirty(track, item)` — the first argument must be a
   `MediaTrack`), then calls `reaper.UpdateItemInProject` and
   `reaper.UpdateArrange`. The old `PCM_source` is intentionally **not**
