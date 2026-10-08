@@ -7,7 +7,7 @@
   between a category (the track name) and its folder on disk, so the mapping can
   be changed from inside REAPER instead of editing a script by hand.
 
-  The result is written to SFXCategories.ini next to the scripts. Every other
+  The result is written to InsertRandomSFX_Settings.ini next to the scripts. Every other
   SFX action reads that file when it runs, so changes take effect on the next
   action (no reload of the scripts needed).
 

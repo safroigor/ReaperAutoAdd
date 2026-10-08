@@ -14,7 +14,7 @@ Four scripts; all shared logic lives in the core:
 | `scripts/InsertRandomSFXAtMouse.lua` | Wrapper: Alt+click. If an item is under the mouse → `browseSample(item, BROWSE_NEXT)`; otherwise → insert at the mouse time. |
 | `scripts/NextSample.lua` | Wrapper: `browseSelectedSample(BROWSE_NEXT)`. |
 | `scripts/PreviousSample.lua` | Wrapper: `browseSelectedSample(BROWSE_PREVIOUS)`. |
-| `scripts/SFXSettings.lua` | Settings window (`gfx`): edits the category→folder mapping and writes `SFXCategories.ini`. |
+| `scripts/SFXSettings.lua` | Settings window (`gfx`): edits the category→folder mapping and writes `InsertRandomSFX_Settings.ini`. |
 
 The wrappers contain no category/folder/undo logic. Each loads the core with
 `loadfile`, setting `_G.SFX_LOAD_AS_MODULE` so the core returns its functions
@@ -36,7 +36,7 @@ instead of running `main()`. **All five files must stay in the same directory.**
 
   NextSample.lua      (selected item) ---> browseSelectedSample(BROWSE_NEXT)
   PreviousSample.lua  (selected item) ---> browseSelectedSample(BROWSE_PREVIOUS)
-  SFXSettings.lua     (Settings action) -> reads/writes SFXCategories.ini
+  SFXSettings.lua     (Settings action) -> reads/writes InsertRandomSFX_Settings.ini
                                             (config loaded by the core at startup)
 
   insertRandomForTrackAtPosition:
@@ -51,10 +51,10 @@ instead of running `main()`. **All five files must stay in the same directory.**
 
 `scripts/InsertRandomSFX.lua` is organised as:
 
-### 1. Configuration (`CONFIG` + `SFXCategories.ini`)
+### 1. Configuration (`CONFIG` + `InsertRandomSFX_Settings.ini`)
 
 `CONFIG` holds the **built-in defaults**. The live mapping normally comes from
-`SFXCategories.ini`, a small text file next to the scripts that is edited by the
+`InsertRandomSFX_Settings.ini`, a small text file next to the scripts that is edited by the
 `SFX: Settings` action and loaded at startup (see below).
 
 - `category_folders` — the **track name → folder** map (single source of truth
@@ -77,7 +77,7 @@ instead of running `main()`. **All five files must stay in the same directory.**
 No business logic mentions any specific category name; categories exist only as
 rows in this table.
 
-**Configuration file.** `CONFIG_FILENAME` (`SFXCategories.ini`) lives next to
+**Configuration file.** `CONFIG_FILENAME` (`InsertRandomSFX_Settings.ini`) lives next to
 the scripts. Its format is one `track name = folder` line per category (`#`/`;`
 comments and blank lines ignored). At the bottom of the core, before the module
 hook, `loadCategoriesFromFile(configFilePath())` runs — only when the `reaper`
@@ -138,12 +138,13 @@ A thin boundary around `reaper.*`:
 | `getProjectState` / `setProjectState` | project-scoped string state (`SetProjExtState`) |
 | `attachSource(take, filePath)` | attach the file as the take's source, return its natural length (shared by insert + browse) |
 | `setTakeName(take, filePath)` | set the take's displayed name (`P_NAME`) to the file name, matching a normal import |
+| `buildPeaks(source)` | build a source's peaks now (Begin/Run/Finish) so the waveform draws immediately |
 | `insertMediaOnTrack(track, filePath, pos)` | create the item + take, attach the source at `pos`, return the new item |
-| `refreshItem(item)` | after a source swap: mark the item's track dirty, refresh the item, redraw |
+| `refreshItem(item)` | after a source change: mark the item's track dirty, refresh the item, redraw |
 | `setEditCursorToItemStart(item)` | `SetEditCurPos` to the item's `D_POSITION` |
 | `seedRandom()` | seed the RNG with time + high-resolution time |
 | `scriptDirectory()` | directory of the running script (for the config file) |
-| `configFilePath()` | absolute path of `SFXCategories.ini` |
+| `configFilePath()` | absolute path of `InsertRandomSFX_Settings.ini` |
 | `readTextFile` / `writeTextFile` | small `io.open` wrappers |
 | `readCategoryRowsFromFile(path)` | parse the settings file, or nil if missing |
 | `loadCategoriesFromFile(path)` | apply the settings file over the defaults |
@@ -177,7 +178,9 @@ length. REAPER still creates and owns the media source and determines its
 properties — the script never decodes audio. The take is then named after the
 file (`setTakeName` → `P_NAME`), because an API-created take has an empty name
 and the item label would otherwise be blank; a normal REAPER import shows the
-file name here.
+file name here. Finally it builds the new source's peaks (`buildPeaks`) and
+refreshes the item (`refreshItem`), so the waveform is drawn immediately instead
+of only after a later redraw or zoom.
 
 The script deliberately does **not** use `reaper.InsertMedia`: it inserts at the
 edit cursor and then moves the edit/play cursor to the end of the inserted item,
@@ -217,8 +220,9 @@ existing take:
 ```lua
 local length = attachSource(take, newPath)  -- create + attach, natural length
 setTakeName(take, newPath)                  -- label follows the new file
+buildPeaks(reaper.GetMediaItemTake_Source(take))  -- new waveform, immediately
 -- set D_LENGTH/metadata; the item's exact D_POSITION is left untouched
-refreshItem(item)                           -- peaks + item state + redraw
+refreshItem(item)                           -- item state + redraw
 -- the OLD source is intentionally NOT destroyed (see below)
 ```
 
@@ -236,10 +240,12 @@ Ownership and lifetime:
 
 Refresh: `SetMediaItemTake_Source` alone leaves REAPER's cached item state
 (playback and peaks) pointing at the previous source, so `D_LENGTH` would change
-while the old audio/waveform stayed. `refreshItem(item)` therefore marks the
-item's track dirty (`MarkTrackItemsDirty`, so peaks are rebuilt from the new
-source), refreshes the item (`UpdateItemInProject`) and redraws
-(`UpdateArrange`).
+while the old audio/waveform stayed. `buildPeaks(source)` builds the new
+source's peaks (REAPER's Begin/Run/Finish sequence) so the waveform is available
+to draw right away, and `refreshItem(item)` marks the item's track dirty
+(`MarkTrackItemsDirty`, so peaks are rebuilt from the new source), refreshes the
+item (`UpdateItemInProject`) and redraws (`UpdateArrange`). Insertion uses the
+same two helpers so a brand-new item never draws with missing peaks.
 
 To make the new source define the item's natural length, `attachSource` resets
 the take's `D_STARTOFFS` to 0 and `D_PLAYRATE` to 1 and returns

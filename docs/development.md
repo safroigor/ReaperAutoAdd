@@ -25,7 +25,7 @@ scripts/InsertRandomSFXAtMouse.lua Alt+click wrapper (loads the core module)
 scripts/NextSample.lua             "SFX: Next Sample" wrapper
 scripts/PreviousSample.lua         "SFX: Previous Sample" wrapper
 scripts/SFXSettings.lua            "SFX: Settings" gfx window (config editor)
-scripts/SFXCategories.ini          created by the settings window (not committed)
+scripts/InsertRandomSFX_Settings.ini          created by the settings window (not committed)
 tests/run_tests.lua                unit tests for the pure logic
 docs/                              architecture, development, roadmap
 ```
@@ -164,14 +164,14 @@ instead of testing it only manually.
 
 ## Manual test cases — settings window (`SFX: Settings`)
 
-Run the `SFX: Settings` action. The config file (`SFXCategories.ini`) lives next
+Run the `SFX: Settings` action. The config file (`InsertRandomSFX_Settings.ini`) lives next
 to the scripts.
 
 | # | Scenario | Action | Expected |
 | --- | --- | --- | --- |
 | S1 | First open | Run `SFX: Settings` with no config file | Window shows the built-in defaults; status says no settings file yet |
 | S2 | Add | Click Add, enter a name, pick a folder | New row appears, marked "Remember to Save" |
-| S3 | Save | Click Save | `SFXCategories.ini` is created next to the scripts; status confirms |
+| S3 | Save | Click Save | `InsertRandomSFX_Settings.ini` is created next to the scripts; status confirms |
 | S4 | Applies to insertion | Save new category `door`, create+select a `door` track, insert | Random file inserted from the chosen folder |
 | S5 | Edit | Double-click a row, rename and re-pick the folder | Row updated |
 | S6 | Remove | Select a row, click Remove | Row disappears; Save persists the removal |
@@ -282,6 +282,7 @@ Waveform:
 | W-C | Natural length | Alt+click to a longer/shorter file | Item length becomes the new source's natural length |
 | W-D | Repeated browsing | Alt+click several times | Waveform keeps up each time |
 | W-E | Wrap-around | Alt+click at the last file | Wraps to the first; waveform updates |
+| W-F | **Initial insert** | Insert an SFX into an empty project (ideally a file never imported before) | The waveform is drawn **immediately** — no zoom, scroll or wait needed |
 
 Undo:
 

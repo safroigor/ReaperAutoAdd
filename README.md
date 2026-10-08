@@ -100,7 +100,7 @@ Buttons: **Add** (asks for the track name, then opens REAPER's folder picker),
 **Remove**, **Up** / **Down** (reorder; matching is by name, so order is only
 cosmetic), **Reload** (re-read from disk), **Save**, **Close**.
 
-Saving writes `SFXCategories.ini` **next to the scripts**. Every SFX action reads
+Saving writes `InsertRandomSFX_Settings.ini` **next to the scripts**. Every SFX action reads
 that file when it runs, so changes apply to the next action without reloading
 anything. The file is plain text and safe to edit by hand:
 
@@ -117,7 +117,7 @@ Rules and behaviour:
   matched case-insensitively (`Gun`, `gun`, `GUN` all resolve to `gun`).
 - Duplicate names are rejected, and empty names are not saved.
 - If you delete a folder, saving warns you and lets you confirm or cancel.
-- If `SFXCategories.ini` does not exist (or is empty), the built-in defaults in
+- If `InsertRandomSFX_Settings.ini` does not exist (or is empty), the built-in defaults in
   the script are used and shown in the window.
 
 ## Configuration
@@ -127,7 +127,7 @@ The category mapping can be changed either through the `SFX: Settings` action
 top of `scripts/InsertRandomSFX.lua`.
 
 The `CONFIG.category_folders` table holds the **built-in defaults**. They are
-used only when no `SFXCategories.ini` exists. Once the settings file is
+used only when no `InsertRandomSFX_Settings.ini` exists. Once the settings file is
 present it overrides this table at startup.
 
 The important field is `category_folders`. **The key is the category ID (which
@@ -267,7 +267,7 @@ You may also add the actions to a toolbar button.
 ## How it works
 
 - **Configuration is loaded at startup.** Each action reads
-  `SFXCategories.ini` (edited by `SFX: Settings`) next to the scripts and falls
+  `InsertRandomSFX_Settings.ini` (edited by `SFX: Settings`) next to the scripts and falls
   back to the built-in `CONFIG.category_folders` defaults when it is missing.
 - **Configuration resolves track → category.** The selected track's name is
   matched case-insensitively against the configured category IDs.
@@ -292,27 +292,27 @@ You may also add the actions to a toolbar button.
 These are internal details, not user configuration steps. You do not need to
 call these APIs yourself.
 
-1. **Newly created items are explicitly refreshed.** After a new item is fully
-   configured, the code calls:
+1. **Newly created items get their peaks built and are explicitly refreshed.**
+   After a new item is fully configured, the code builds the source's peaks and
+   then refreshes the item:
 
    ```lua
+   buildPeaks(reaper.GetMediaItemTake_Source(take))  -- Begin/Run/Finish
+   reaper.MarkTrackItemsDirty(reaper.GetMediaItem_Track(item), item)
    reaper.UpdateItemInProject(item)
    reaper.UpdateArrange()
    ```
 
-   This registers the programmatically created item with REAPER's project/arrange
-   state so it cannot act as a playback boundary (playback stopping at the item's
-   end).
+   Building the peaks makes the waveform appear **immediately** (a new source
+   has no peaks yet; without this REAPER builds them lazily and the waveform only
+   shows up later, on a zoom/redraw). The refresh registers the programmatically
+   created item with REAPER's project/arrange state so it cannot act as a
+   playback boundary (playback stopping at the item's end).
 
 2. **Existing-item replacement refreshes the waveform.** After swapping an
-   existing item's source, the code calls:
-
-   ```lua
-   reaper.PCM_Source_BuildPeaks(attached, 0)
-   ```
-
-   on the source the take actually points at, so the displayed waveform is
-   refreshed to the new source.
+   existing item's source, the code builds the new source's peaks with the same
+   `buildPeaks` helper, so the displayed waveform is the new source's, not the
+   previous one.
 
 3. **Inserted and browsed takes are named after their file.** REAPER's own media
    import names a take after the file it plays, which is what the item label
@@ -330,7 +330,8 @@ call these APIs yourself.
 | "No supported audio files found…" | The folder exists but contains no supported extensions directly inside it (subfolders are not scanned). Check the files and `supported_extensions`. |
 | Script does not appear in the Action List | Re-run **New action → Load ReaScript…** and re-select the file. Keep all four scripts in the same folder. |
 | Alt+Left Click does nothing | The mouse modifier is not set in **both** the **Track** and **Media item** contexts, or the click landed in an item sub-context (edge/fade). Add the action to that context too. |
-| Waveform not updating after browsing | Replacement explicitly refreshes the attached source's peaks; if it still looks stale, re-run the action. Verify the file has readable audio. |
+| Waveform not updating after browsing | Replacement builds the attached source's peaks; if it still looks stale, re-run the action. Verify the file has readable audio. |
+| Waveform missing right after inserting an item | This is fixed: inserted items build the new source's peaks immediately. Make sure you are running the current scripts. |
 | Playback/transport stops at an inserted item | This is fixed: newly created items are refreshed with `UpdateItemInProject` + `UpdateArrange`. Make sure you are running the current scripts. |
 | Inserted item shows no file name | This is fixed: takes are named from their source file (`P_NAME`), like REAPER's normal import. Make sure you are running the current scripts. |
 

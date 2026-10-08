@@ -37,7 +37,7 @@ case-insensitive**. Users can add more categories as configuration.
 
 Still open for later:
 
-- ✅ Mapping moved out of inline Lua into `SFXCategories.ini`, edited by the
+- ✅ Mapping moved out of inline Lua into `InsertRandomSFX_Settings.ini`, edited by the
   `SFX: Settings` window (Phase 4) — users no longer edit the script by hand.
 - ✅ The settings window lists the configured categories, so they are
   discoverable.
@@ -93,7 +93,7 @@ Done:
 Potentially, in rough priority:
 
 - **Project-level configuration** (per-project folder mapping).
-- ✅ **Global / user library configuration** — `SFXCategories.ini` next to the
+- ✅ **Global / user library configuration** — `InsertRandomSFX_Settings.ini` next to the
   scripts, shared across projects.
 - **Subfolders** — optional recursive lookup within a category.
 - **Favorites** and pinned samples.

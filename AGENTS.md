@@ -78,9 +78,10 @@ insert random. It never relies on the selection for browsing.
 
 **Settings** — [`SFXSettings.lua`](scripts/SFXSettings.lua) (action
 `SFX: Settings`) is a small `gfx` window that edits the track-name → folder
-mapping and writes `SFXCategories.ini` next to the scripts. The core reads that
-file at startup and applies it over the built-in `CONFIG.category_folders`
-defaults, so the mapping can be changed without editing any script.
+mapping and writes `InsertRandomSFX_Settings.ini` next to the scripts. The core
+reads that file at startup and applies it over the built-in
+`CONFIG.category_folders` defaults, so the mapping can be changed without editing
+any script.
 
 Supported formats: `.wav`, `.aif`, `.aiff`, `.flac`, `.ogg`, `.mp3`.
 
@@ -101,7 +102,7 @@ Two shared operations, called by thin wrappers:
   Alt+click, item under mouse  ---------> browseSample(item, BROWSE_NEXT)
   NextSample.lua (selected item) -------> browseSample(item, BROWSE_NEXT)
   PreviousSample.lua (selected item) ---> browseSample(item, BROWSE_PREVIOUS)
-  SFXSettings.lua (settings action) ----> edits SFXCategories.ini
+  SFXSettings.lua (settings action) ----> edits InsertRandomSFX_Settings.ini
                                           (core loads it at startup)
 
   insertRandomForTrackAtPosition:
@@ -119,8 +120,8 @@ is a configuration change, not a logic change.
 The core script is organised into these layers so future growth stays cheap:
 
 1. **Configuration** — `CONFIG.category_folders` holds the built-in defaults;
-   the live mapping is loaded from `SFXCategories.ini` at startup (see below).
-   Logic never edits this.
+   the live mapping is loaded from `InsertRandomSFX_Settings.ini` at startup
+   (see below). Logic never edits this.
 2. **Stored-state identifiers** — `ITEM_META` (`P_EXT:` keys),
    `PROJ_STATE_SECTION`, browse directions.
 3. **Pure helpers** — no REAPER API calls (extension parsing, category
@@ -136,7 +137,7 @@ Plus three thin **wrappers** (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`,
 `PreviousSample.lua`) that only resolve an entry point and call the shared
 function, and the **settings window** `SFXSettings.lua`, which uses the core's
 pure `parseCategories` / `serializeCategories` helpers and the file I/O helpers
-to read and write `SFXCategories.ini`.
+to read and write `InsertRandomSFX_Settings.ini`.
 
 The settings file is loaded at the bottom of the core, before the module hook,
 only when the `reaper` global exists — so the Lua unit tests keep the inline
@@ -178,9 +179,10 @@ See `docs/architecture.md` for extension points.
 - **Isolate REAPER API interaction** in the "REAPER API HELPERS" section.
   Business logic must not call `reaper.*` directly.
 - **Keep configuration separate from logic.** `CONFIG.category_folders` holds
-  the built-in defaults; the live mapping comes from `SFXCategories.ini`
-  (edited by `SFX: Settings`). Parsing/serialization stays pure and unit-tested;
-  configuration loading must never run when `reaper` is absent (the tests).
+  the built-in defaults; the live mapping comes from
+  `InsertRandomSFX_Settings.ini` (edited by `SFX: Settings`).
+  Parsing/serialization stays pure and unit-tested; configuration loading must
+  never run when `reaper` is absent (the tests).
 - **Do not introduce external dependencies** without a strong, documented
   reason.
 - **Preserve REAPER undo behaviour.** Any state-changing operation goes inside
@@ -208,6 +210,12 @@ See `docs/architecture.md` for extension points.
 - **`MarkTrackItemsDirty` requires a `MediaTrack` as its first argument** (use
   `reaper.GetMediaItem_Track(item)`); passing `nil` throws and aborts the script,
   leaving the undo block open.
+- **Insertion and browsing must build the new source's peaks and refresh the
+  item.** `buildPeaks(source)` runs REAPER's Begin/Run/Finish sequence so the
+  waveform draws immediately; `refreshItem(item)` marks the item's track dirty
+  (`MarkTrackItemsDirty`), calls `UpdateItemInProject` and `UpdateArrange`.
+  Without the peak build a freshly created item can draw before its peaks exist,
+  so the waveform only appears later (on a zoom/redraw).
 - **Browsing must not move the item.** Next/Previous (and Alt+click on an item)
   replace the active take's source in place: same item, same track, exact
   `D_POSITION` preserved, and the new source determines the natural length
@@ -238,7 +246,7 @@ See `docs/architecture.md` for extension points.
    (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`, `PreviousSample.lua`), or
    the settings window (`SFXSettings.lua`), or add files under `scripts/`. Keep
    all scripts in the same directory: the wrappers load the core by relative
-   path and the settings window writes `SFXCategories.ini` there.
+   path and the settings window writes `InsertRandomSFX_Settings.ini` there.
 3. **Run the automated tests** from the repository root:
 
    ```sh
@@ -276,9 +284,9 @@ configuration/settings section and the tests at the same time.
 These are **ideas, not requirements**. Do not implement them unless the task
 explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
 
-- **Configurable category mapping** — ✅ implemented: `SFXCategories.ini` in a
-  data file plus the `SFX: Settings` window. (Multiple inline categories were
-  Phase 1.)
+- **Configurable category mapping** — ✅ implemented:
+  `InsertRandomSFX_Settings.ini` in a data file plus the `SFX: Settings` window.
+  (Multiple inline categories were Phase 1.)
 - **Additional mouse contexts** — item edge / fade / "Media item bottom half"
   bindings, only if a real workflow needs them. (Alt+left-click on the Track and
   Media item contexts is already implemented — Phase 3.)

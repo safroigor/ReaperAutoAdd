@@ -118,7 +118,7 @@ local BROWSE_PREVIOUS = -1
 -- through the "SFX: Settings" action (SFXSettings.lua). When present it
 -- overrides the built-in CONFIG.category_folders defaults at startup, so users
 -- never have to edit this file by hand.
-local CONFIG_FILENAME = "SFXCategories.ini"
+local CONFIG_FILENAME = "InsertRandomSFX_Settings.ini"
 
 -- =====================================================================
 -- PURE HELPERS -- no REAPER API access, unit-tested in tests/run_tests.lua
@@ -301,7 +301,7 @@ local function configuredCategories()
 end
 
 -- ---------------------------------------------------------------------
--- Configuration file (SFXCategories.ini, edited by SFXSettings.lua)
+-- Configuration file (InsertRandomSFX_Settings.ini, edited by SFXSettings.lua)
 -- ---------------------------------------------------------------------
 
 -- Trim surrounding whitespace.
@@ -471,10 +471,29 @@ local function attachSource(take, filePath)
     return reaper.GetMediaSourceLength(source)
 end
 
--- Refresh an item after its take's source changed. SetMediaItemTake_Source
--- swaps the source, but REAPER keeps cached item/peak state: mark the item's
--- track dirty so peaks are rebuilt from the new source, refresh the item state,
--- then redraw.
+-- Build a source's peaks now, using REAPER's documented Begin/Run/Finish
+-- sequence. A freshly attached source (a new file that was never imported
+-- before) has no peaks yet; if we only redraw, REAPER builds them lazily in the
+-- background and the waveform appears "later", on a zoom/scroll/redraw. Doing
+-- the build here makes the waveform show immediately.
+--
+--   mode 0 = begin  (returns 0 when there is nothing to build)
+--   mode 1 = run    (returns the percentage of the file still remaining)
+--   mode 2 = finish
+local function buildPeaks(source)
+    if not source then return end
+    if reaper.PCM_Source_BuildPeaks(source, 0) == 0 then return end
+    local guard = 0
+    while reaper.PCM_Source_BuildPeaks(source, 1) ~= 0 and guard < 100000 do
+        guard = guard + 1
+    end
+    reaper.PCM_Source_BuildPeaks(source, 2)
+end
+
+-- Refresh an item after its take's source changed or after it was created.
+-- The take points at the right source, but REAPER keeps cached item/peak state:
+-- mark the item's track dirty so peaks are rebuilt from the new source, refresh
+-- the item state, then redraw.
 local function refreshItem(item)
     reaper.MarkTrackItemsDirty(reaper.GetMediaItem_Track(item), item)
     reaper.UpdateItemInProject(item)
@@ -508,12 +527,12 @@ local function insertMediaOnTrack(track, filePath, pos)
     reaper.SetMediaItemInfo_Value(item, "D_POSITION", pos)
     reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
 
-    -- A programmatically created item is not fully registered with REAPER's
-    -- project/arrange state until it is explicitly refreshed. Without this the
-    -- new item can act as a playback boundary (playback stops at its end);
-    -- UpdateItemInProject + UpdateArrange make the new item's state take effect.
-    reaper.UpdateItemInProject(item)
-    reaper.UpdateArrange()
+    -- Build the new source's peaks and mark the item's track dirty so the
+    -- waveform is drawn immediately. Without this a programmatically created
+    -- item can draw before its peaks exist, so the waveform only shows up later
+    -- (on a redraw/zoom) even though the audio plays fine.
+    buildPeaks(reaper.GetMediaItemTake_Source(take))
+    refreshItem(item)
     return item
 end
 
@@ -738,14 +757,10 @@ local function browseSample(item, direction)
         setTakeName(take, newPath)
         -- SetMediaItemTake_Source swaps the source but does not refresh the
         -- take's cached peak/source state, so an EXISTING item keeps drawing the
-        -- previous waveform. PCM_Source_BuildPeaks(..., 0) on the source the take
-        -- actually points at re-associates REAPER's peak state with the newly
-        -- attached source. Mode 0 commonly reports "nothing to build" yet is
-        -- still what makes the change take effect, so no mode 1/2 loop is needed.
-        local attached = reaper.GetMediaItemTake_Source(take)
-        if attached then
-            reaper.PCM_Source_BuildPeaks(attached, 0)
-        end
+        -- previous waveform. Building the peaks of the source the take now
+        -- points at re-associates REAPER's peak state with the new source and
+        -- makes the new waveform appear immediately.
+        buildPeaks(reaper.GetMediaItemTake_Source(take))
         reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
         setItemMetadata(item, ITEM_META.source, canonicalizePath(newPath))
         refreshItem(item)
