@@ -79,7 +79,8 @@ insert random. It never relies on the selection for browsing.
 **Settings** —
 [`InsertRandomSFX_Settings.lua`](scripts/InsertRandomSFX_Settings.lua) (action
 `SFX: Settings`) is a small `gfx` window that edits the track-name → folder
-mapping and writes `InsertRandomSFX_Settings.ini` next to the scripts. The core
+mapping and writes `InsertRandomSFX_Settings.ini` into REAPER's Scripts resource
+folder (where the scripts live). The core
 reads that file at startup and applies it over the built-in
 `CONFIG.category_folders` defaults, so the mapping can be changed without editing
 any script.

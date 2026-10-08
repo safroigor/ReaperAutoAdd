@@ -54,7 +54,8 @@ instead of running `main()`. **All five files must stay in the same directory.**
 ### 1. Configuration (`CONFIG` + `InsertRandomSFX_Settings.ini`)
 
 `CONFIG` holds the **built-in defaults**. The live mapping normally comes from
-`InsertRandomSFX_Settings.ini`, a small text file next to the scripts that is edited by the
+`InsertRandomSFX_Settings.ini`, a small text file in REAPER's Scripts resource
+folder that is edited by the
 `SFX: Settings` action and loaded at startup (see below).
 
 - `category_folders` — the **track name → folder** map (single source of truth
@@ -77,8 +78,8 @@ instead of running `main()`. **All five files must stay in the same directory.**
 No business logic mentions any specific category name; categories exist only as
 rows in this table.
 
-**Configuration file.** `CONFIG_FILENAME` (`InsertRandomSFX_Settings.ini`) lives next to
-the scripts. Its format is one `track name = folder` line per category (`#`/`;`
+**Configuration file.** `CONFIG_FILENAME` (`InsertRandomSFX_Settings.ini`) lives in
+REAPER's Scripts resource folder. Its format is one `track name = folder` line per category (`#`/`;`
 comments and blank lines ignored). At the bottom of the core, before the module
 hook, `loadCategoriesFromFile(configFilePath())` runs — only when the `reaper`
 global exists, so the Lua unit tests keep the inline defaults. A non-empty file

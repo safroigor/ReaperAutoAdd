@@ -164,14 +164,14 @@ instead of testing it only manually.
 
 ## Manual test cases — settings window (`SFX: Settings`)
 
-Run the `SFX: Settings` action. The config file (`InsertRandomSFX_Settings.ini`) lives next
-to the scripts.
+Run the `SFX: Settings` action. The config file (`InsertRandomSFX_Settings.ini`) lives in
+REAPER's Scripts resource folder.
 
 | # | Scenario | Action | Expected |
 | --- | --- | --- | --- |
 | S1 | First open | Run `SFX: Settings` with no config file | Window shows the built-in defaults; status says no settings file yet |
 | S2 | Add | Click Add, enter a name, pick a folder | New row appears, marked "Remember to Save" |
-| S3 | Save | Click Save | `InsertRandomSFX_Settings.ini` is created next to the scripts; status confirms |
+| S3 | Save | Click Save | `InsertRandomSFX_Settings.ini` is created in REAPER's Scripts resource folder; status confirms |
 | S4 | Applies to insertion | Save new category `door`, create+select a `door` track, insert | Random file inserted from the chosen folder |
 | S5 | Edit | Double-click a row, rename and re-pick the folder | Row updated |
 | S6 | Remove | Select a row, click Remove | Row disappears; Save persists the removal |

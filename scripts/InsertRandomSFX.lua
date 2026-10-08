@@ -114,7 +114,8 @@ local PROJ_STATE_SECTION = "RandomSFXInserter"
 local BROWSE_NEXT = 1
 local BROWSE_PREVIOUS = -1
 
--- Name of the global settings file. It lives next to the scripts and is edited
+-- Name of the global settings file. It lives in REAPER's Scripts resource folder
+-- and is edited
 -- through the "SFX: Settings" action (InsertRandomSFX_Settings.lua). When present it
 -- overrides the built-in CONFIG.category_folders defaults at startup, so users
 -- never have to edit this file by hand.
@@ -561,9 +562,9 @@ end
 -- Settings file I/O (used at startup and by the SFX: Settings action)
 -- ---------------------------------------------------------------------
 
--- Directory of the running script (action or module), so the settings file can
--- be found next to the scripts regardless of where they live. Mirrors the
--- resolution used by the wrappers.
+-- Directory of the running script (action or module). Used as the fallback
+-- location for the settings file when REAPER's resource path is unavailable;
+-- mirrors the resolution used by the wrappers.
 local function scriptDirectory()
     local _, filename = reaper.get_action_context()
     if (not filename or filename == "") and debug and debug.getinfo then
@@ -574,9 +575,30 @@ local function scriptDirectory()
     return filename:match("^(.*[\\/])") or ""
 end
 
--- Absolute path of the settings file (next to the scripts).
+-- REAPER's resource Scripts folder (where scripts live by default).
+local function resourceScriptsDirectory()
+    if type(reaper.GetResourcePath) ~= "function" then return "" end
+    local path = reaper.GetResourcePath()
+    if not path or path == "" then return "" end
+    path = path:gsub("\\", "/")
+    if path:sub(-1) ~= "/" then path = path .. "/" end
+    return path .. "Scripts/"
+end
+
+-- Path of the settings file. It is anchored to REAPER's Scripts resource folder
+-- so that the settings window and ALL actions resolve the SAME file even if one
+-- of them was loaded from a different folder. Falls back to the running script's
+-- directory only when the resource path is unavailable.
 local function configFilePath()
-    return scriptDirectory() .. CONFIG_FILENAME
+    local dir = resourceScriptsDirectory()
+    if dir == "" then dir = scriptDirectory() end
+    if dir == "" then return CONFIG_FILENAME end
+    return dir .. CONFIG_FILENAME
+end
+
+-- True if a settings file exists at the resolved path.
+local function configFileExists()
+    return reaper.file_exists(configFilePath())
 end
 
 -- Read a whole text file, or nil if it cannot be opened.
@@ -614,8 +636,12 @@ local function loadCategoriesFromFile(path)
     return true
 end
 
--- Write rows to the settings file. Returns ok, err.
+-- Write rows to the settings file, creating its folder if needed. Returns ok, err.
 local function saveCategories(path, rows)
+    local dir = path:match("^(.*[\\/])")
+    if dir and dir ~= "" and type(reaper.RecursiveCreateDirectory) == "function" then
+        reaper.RecursiveCreateDirectory(dir, 0)
+    end
     return writeTextFile(path, serializeCategories(rows))
 end
 
@@ -633,12 +659,18 @@ local function insertRandomForTrackAtPosition(track, position)
     local trackName = getTrackName(track)
     local category = resolveCategoryFromTrackName(trackName)
     if not category then
+        local configPath = configFilePath()
+        local configState = configFileExists()
+            and "found" or "NOT FOUND - using built-in defaults"
         return showError(string.format(
             "Selected track is not a supported category.\n\n"
             .. "Selected track: %q\n"
-            .. "Supported track names: %s",
+            .. "Supported track names: %s\n\n"
+            .. "Settings file: %s (%s)",
             trackName,
-            table.concat(configuredCategories(), ", ")))
+            table.concat(configuredCategories(), ", "),
+            configPath,
+            configState))
     end
 
     -- 2. The category must point at an existing folder.
@@ -646,8 +678,8 @@ local function insertRandomForTrackAtPosition(track, position)
     if not directoryExists(folder) then
         return showError(string.format(
             "The %s folder does not exist:\n%s\n\n"
-            .. "Edit CONFIG.category_folders at the top of the script.",
-            category, folder))
+            .. "Set it in 'SFX: Settings' (settings file: %s).",
+            category, folder, configFilePath()))
     end
 
     -- 3. That folder must contain at least one supported audio file.
@@ -850,7 +882,9 @@ return {
     currentCategoryRows = currentCategoryRows,
     applyCategoryRows = applyCategoryRows,
     scriptDirectory = scriptDirectory,
+    resourceScriptsDirectory = resourceScriptsDirectory,
     configFilePath = configFilePath,
+    configFileExists = configFileExists,
     readCategoryRowsFromFile = readCategoryRowsFromFile,
     loadCategoriesFromFile = loadCategoriesFromFile,
     saveCategories = saveCategories,

@@ -46,7 +46,7 @@ No SWS, no `js_ReaScriptAPI`, no external files — REAPER's own API only.
 
 Five production scripts are provided. **Keep all five in the same folder** — the
 action wrappers load `InsertRandomSFX.lua` from their own directory, and the
-settings window writes its file next to them.
+settings window writes its settings file into the same Scripts resource folder.
 
 | Script | REAPER action (after loading) | Role |
 | --- | --- | --- |
@@ -100,7 +100,8 @@ Buttons: **Add** (asks for the track name, then opens REAPER's folder picker),
 **Remove**, **Up** / **Down** (reorder; matching is by name, so order is only
 cosmetic), **Reload** (re-read from disk), **Save**, **Close**.
 
-Saving writes `InsertRandomSFX_Settings.ini` **next to the scripts**. Every SFX action reads
+Saving writes `InsertRandomSFX_Settings.ini` into **REAPER's Scripts resource
+folder** (next to the scripts by default). Every SFX action reads
 that file when it runs, so changes apply to the next action without reloading
 anything. The file is plain text and safe to edit by hand:
 
@@ -267,7 +268,8 @@ You may also add the actions to a toolbar button.
 ## How it works
 
 - **Configuration is loaded at startup.** Each action reads
-  `InsertRandomSFX_Settings.ini` (edited by `SFX: Settings`) next to the scripts and falls
+  `InsertRandomSFX_Settings.ini` (edited by `SFX: Settings`) in REAPER's Scripts
+  resource folder and falls
   back to the built-in `CONFIG.category_folders` defaults when it is missing.
 - **Configuration resolves track → category.** The selected track's name is
   matched case-insensitively against the configured category IDs.

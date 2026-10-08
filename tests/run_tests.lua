@@ -430,6 +430,10 @@ check("module exports applyCategoryRows",
     type(Sfx.applyCategoryRows) == "function")
 check("module exports configFilePath",
     type(Sfx.configFilePath) == "function")
+check("module exports configFileExists",
+    type(Sfx.configFileExists) == "function")
+check("module exports resourceScriptsDirectory",
+    type(Sfx.resourceScriptsDirectory) == "function")
 check("module exports readCategoryRowsFromFile",
     type(Sfx.readCategoryRowsFromFile) == "function")
 check("module exports saveCategories",
