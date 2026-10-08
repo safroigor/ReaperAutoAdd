@@ -264,6 +264,13 @@ call these APIs yourself.
    on the source the take actually points at, so the displayed waveform is
    refreshed to the new source.
 
+3. **Inserted and browsed takes are named after their file.** REAPER's own media
+   import names a take after the file it plays, which is what the item label
+   shows. A take created through the API starts with an **empty** take name, so
+   an item built directly would display no name. Insertion and browsing therefore
+   set the take name (`P_NAME`) to the source file's name, so the item shows the
+   sample name just like a normal import (and stays correct after browsing).
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
@@ -275,6 +282,7 @@ call these APIs yourself.
 | Alt+Left Click does nothing | The mouse modifier is not set in **both** the **Track** and **Media item** contexts, or the click landed in an item sub-context (edge/fade). Add the action to that context too. |
 | Waveform not updating after browsing | Replacement explicitly refreshes the attached source's peaks; if it still looks stale, re-run the action. Verify the file has readable audio. |
 | Playback/transport stops at an inserted item | This is fixed: newly created items are refreshed with `UpdateItemInProject` + `UpdateArrange`. Make sure you are running the current scripts. |
+| Inserted item shows no file name | This is fixed: takes are named from their source file (`P_NAME`), like REAPER's normal import. Make sure you are running the current scripts. |
 
 Errors are shown as a REAPER message box; success is silent. `Ctrl+Z` undoes
 each operation in a single step.

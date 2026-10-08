@@ -149,6 +149,7 @@ instead of testing it only manually.
 | 10 | Undo | Run #1, then `Ctrl+Z` once | Item removed in one step |
 | 11 | Multiple invocations | Move the cursor and run several times | Each run inserts an independent item at its position |
 | 12 | **Metadata** | Insert, save project, inspect the `.RPP` | Item has `sfx_category`, `sfx_library`, `sfx_source` |
+| 12b | **Take name** | Insert with a non-empty library folder | The item label shows the inserted file's name (e.g. `boom.wav`), like a normal import |
 | 13 | **Immediate repeat** | With ≥2 files, insert repeatedly | Never two identical sources in a row |
 | 14 | **Per-category repeat state** | Insert from `gun`, then from `impact`, then `gun` | The `impact` pick does not affect `gun`'s memory |
 | 15 | **One-file library** | Category folder with a single file, insert several times | Same file inserted repeatedly; no error |
@@ -168,6 +169,7 @@ selected item inserted by this tool.
 | B5 | **Position preserved** | Note the item start, browse | `D_POSITION` is exactly unchanged |
 | B6 | **Natural length** | Browse to a longer/shorter file | Item length becomes the new source's length (not the old one, not truncated) |
 | B7 | **Metadata updated** | Browse, inspect `.RPP` | `sfx_source` reflects the new file; `sfx_library` unchanged |
+| B7b | **Take name updated** | Browse to a different file | The item label shows the new file's name |
 | B8 | Undo | Browse, then `Ctrl+Z` once | One step restores the previous source |
 | B9 | No item selected | Deselect all items, run Next/Previous | "No media item selected." dialog; nothing changed |
 | B10 | No metadata | Select a plain audio item, run Next | "This item has no SFX library metadata." dialog; nothing changed |

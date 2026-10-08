@@ -126,6 +126,14 @@ local function getExtension(fileName)
     return ext:lower()
 end
 
+-- Last path component of a file path: the name after the final "/" or "\".
+-- Used to name a take after its file (see setTakeName), matching REAPER's own
+-- media import, which shows the file name (extension included).
+local function getFileName(path)
+    if type(path) ~= "string" then return "" end
+    return path:match("([^/\\]+)$") or path
+end
+
 local function isSupportedAudioFile(fileName)
     local ext = getExtension(fileName)
     return ext ~= "" and CONFIG.supported_extensions[ext] == true
@@ -305,6 +313,17 @@ local function getTrackName(track)
     return name or ""
 end
 
+-- Name a take after the file it plays. REAPER's normal media import sets the
+-- take name (P_NAME) to the file's name, which is what the item label shows.
+-- A take created through the API starts with an EMPTY name, so an item built
+-- directly by this script would display no name at all (the source length and
+-- audio are correct, only the label is blank). Setting P_NAME restores the
+-- expected label, including after browsing to another file.
+local function setTakeName(take, filePath)
+    reaper.GetSetMediaItemTakeInfo_String(
+        take, "P_NAME", getFileName(filePath), true)
+end
+
 local function showError(message)
     reaper.ShowMessageBox(message, "Random SFX Inserter", 0)
 end
@@ -396,6 +415,7 @@ local function insertMediaOnTrack(track, filePath, pos)
         reaper.DeleteTrackMediaItem(track, item)
         return nil
     end
+    setTakeName(take, filePath)
 
     reaper.SetMediaItemInfo_Value(item, "D_POSITION", pos)
     reaper.SetMediaItemInfo_Value(item, "D_LENGTH", length)
@@ -564,6 +584,8 @@ local function browseSample(item, direction)
     -- new source defines the natural length.
     local length = attachSource(take, newPath)
     if length then
+        -- Keep the displayed take name in sync with the file that now plays.
+        setTakeName(take, newPath)
         -- SetMediaItemTake_Source swaps the source but does not refresh the
         -- take's cached peak/source state, so an EXISTING item keeps drawing the
         -- previous waveform. PCM_Source_BuildPeaks(..., 0) on the source the take
@@ -633,6 +655,7 @@ return {
     BROWSE_NEXT = BROWSE_NEXT,
     BROWSE_PREVIOUS = BROWSE_PREVIOUS,
     getExtension = getExtension,
+    getFileName = getFileName,
     isSupportedAudioFile = isSupportedAudioFile,
     joinPath = joinPath,
     canonicalizePath = canonicalizePath,

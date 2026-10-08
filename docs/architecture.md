@@ -87,6 +87,7 @@ Deterministic, side-effect-free functions covered by `tests/run_tests.lua`:
 | Function | Responsibility |
 | --- | --- |
 | `getExtension(fileName)` | lower-cased extension without the dot |
+| `getFileName(path)` | last path component (the file name), for take naming |
 | `isSupportedAudioFile(fileName)` | extension is in `supported_extensions` |
 | `joinPath(folder, name)` | separator-aware path joining |
 | `canonicalizePath(path)` | forward slashes, collapsed separators, no trailing slash |
@@ -117,6 +118,7 @@ A thin boundary around `reaper.*`:
 | `getItemMetadata` / `setItemMetadata` / `writeItemMetadata` | item `P_EXT:` string state |
 | `getProjectState` / `setProjectState` | project-scoped string state (`SetProjExtState`) |
 | `attachSource(take, filePath)` | attach the file as the take's source, return its natural length (shared by insert + browse) |
+| `setTakeName(take, filePath)` | set the take's displayed name (`P_NAME`) to the file name, matching a normal import |
 | `insertMediaOnTrack(track, filePath, pos)` | create the item + take, attach the source at `pos`, return the new item |
 | `refreshItem(item)` | after a source swap: mark the item's track dirty, refresh the item, redraw |
 | `setEditCursorToItemStart(item)` | `SetEditCurPos` to the item's `D_POSITION` |
@@ -147,7 +149,10 @@ Insertion creates the item directly: `AddMediaItemToTrack` +
 `SetMediaItemTake_Source`), and sets `D_POSITION = position` (edit cursor for the
 standard action, mouse time for the wrapper) and `D_LENGTH` from the source
 length. REAPER still creates and owns the media source and determines its
-properties — the script never decodes audio.
+properties — the script never decodes audio. The take is then named after the
+file (`setTakeName` → `P_NAME`), because an API-created take has an empty name
+and the item label would otherwise be blank; a normal REAPER import shows the
+file name here.
 
 The script deliberately does **not** use `reaper.InsertMedia`: it inserts at the
 edit cursor and then moves the edit/play cursor to the end of the inserted item,
@@ -186,6 +191,7 @@ existing take:
 
 ```lua
 local length = attachSource(take, newPath)  -- create + attach, natural length
+setTakeName(take, newPath)                  -- label follows the new file
 -- set D_LENGTH/metadata; the item's exact D_POSITION is left untouched
 refreshItem(item)                           -- peaks + item state + redraw
 -- the OLD source is intentionally NOT destroyed (see below)

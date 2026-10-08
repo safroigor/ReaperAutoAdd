@@ -68,6 +68,17 @@ equals("getExtension: windows path", Sfx.getExtension("C:\\x\\y.ogg"), "ogg")
 equals("getExtension: non-string", Sfx.getExtension(nil), "")
 
 -- ---------------------------------------------------------------------
+-- getFileName (used to name a take after its file)
+-- ---------------------------------------------------------------------
+
+equals("getFileName: forward slash", Sfx.getFileName("D:/SFX/Guns/gun_01.wav"), "gun_01.wav")
+equals("getFileName: backslash path", Sfx.getFileName("C:\\x\\y\\boom.flac"), "boom.flac")
+equals("getFileName: bare name", Sfx.getFileName("kick.wav"), "kick.wav")
+equals("getFileName: name with spaces", Sfx.getFileName("D:/SFX/Transitions/whoosh 03.aiff"), "whoosh 03.aiff")
+equals("getFileName: empty", Sfx.getFileName(""), "")
+equals("getFileName: non-string", Sfx.getFileName(nil), "")
+
+-- ---------------------------------------------------------------------
 -- isSupportedAudioFile
 -- ---------------------------------------------------------------------
 

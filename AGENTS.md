@@ -181,6 +181,11 @@ See `docs/architecture.md` for extension points.
   and then moves the edit/play cursor to the end of the inserted item, which
   disturbs playback. Create the item directly instead (`AddMediaItemToTrack` +
   `AddTakeToMediaItem` + `PCM_Source_CreateFromFile` + `SetMediaItemTake_Source`).
+- **A take created through the API must be named from its source file.** REAPER
+  names a take after the file on a normal media import (that is what the item
+  label shows), but an API-created take starts with an empty name and would
+  display no name. Insertion and browsing set `P_NAME` via
+  `setTakeName(take, filePath)` to the file's base name (extension included).
 - **`MarkTrackItemsDirty` requires a `MediaTrack` as its first argument** (use
   `reaper.GetMediaItem_Track(item)`); passing `nil` throws and aborts the script,
   leaving the undo block open.
