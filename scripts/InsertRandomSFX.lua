@@ -114,6 +114,12 @@ local PROJ_STATE_SECTION = "RandomSFXInserter"
 local BROWSE_NEXT = 1
 local BROWSE_PREVIOUS = -1
 
+-- Name of the global settings file. It lives next to the scripts and is edited
+-- through the "SFX: Settings" action (SFXSettings.lua). When present it
+-- overrides the built-in CONFIG.category_folders defaults at startup, so users
+-- never have to edit this file by hand.
+local CONFIG_FILENAME = "SFXCategories.ini"
+
 -- =====================================================================
 -- PURE HELPERS -- no REAPER API access, unit-tested in tests/run_tests.lua
 -- =====================================================================
@@ -294,6 +300,88 @@ local function configuredCategories()
     return list
 end
 
+-- ---------------------------------------------------------------------
+-- Configuration file (SFXCategories.ini, edited by SFXSettings.lua)
+-- ---------------------------------------------------------------------
+
+-- Trim surrounding whitespace.
+local function trim(text)
+    return (text:match("^%s*(.-)%s*$"))
+end
+
+-- Normalize a category / track name: trimmed and lower-cased. Matching is
+-- case-insensitive and CONFIG.category_folders keys are lower case, so names
+-- are stored canonically in lower case.
+local function normalizeCategoryName(name)
+    if type(name) ~= "string" then return "" end
+    return trim(name):lower()
+end
+
+-- Parse settings-file text into an ordered list of { name =, folder = } rows.
+-- Format: one `name = folder` mapping per line. Blank lines and lines starting
+-- with `#` or `;` are ignored, malformed lines (no `=`) and empty names are
+-- skipped, and a repeated name keeps its first definition.
+local function parseCategories(text)
+    local rows, seen = {}, {}
+    if type(text) ~= "string" then return rows end
+    for rawLine in text:gmatch("[^\r\n]+") do
+        local line = trim(rawLine)
+        local first = line:sub(1, 1)
+        if line ~= "" and first ~= "#" and first ~= ";" then
+            local name, folder = line:match("^([^=]-)%s*=%s*(.-)%s*$")
+            name = normalizeCategoryName(name)
+            folder = canonicalizePath(folder)
+            if name ~= "" and folder ~= "" and not seen[name] then
+                seen[name] = true
+                rows[#rows + 1] = { name = name, folder = folder }
+            end
+        end
+    end
+    return rows
+end
+
+-- Serialize rows back to settings-file text (deterministic, human-readable).
+local function serializeCategories(rows)
+    local lines = {
+        "# REAPER Random SFX Inserter -- category mapping.",
+        "# One line per category:  track name = folder",
+        "# Edited by the 'SFX: Settings' action; safe to edit by hand.",
+    }
+    for _, row in ipairs(rows or {}) do
+        local name = normalizeCategoryName(row.name)
+        local folder = canonicalizePath(row.folder)
+        if name ~= "" and folder ~= "" then
+            lines[#lines + 1] = name .. " = " .. folder
+        end
+    end
+    return table.concat(lines, "\n") .. "\n"
+end
+
+-- The currently configured categories as rows, sorted by name. Used as the
+-- initial content of the settings window when no settings file exists yet.
+local function currentCategoryRows()
+    local rows = {}
+    for name, folder in pairs(CONFIG.category_folders) do
+        rows[#rows + 1] = { name = name, folder = folder }
+    end
+    table.sort(rows, function(a, b) return a.name < b.name end)
+    return rows
+end
+
+-- Replace CONFIG.category_folders with the given rows (name -> folder).
+local function applyCategoryRows(rows)
+    local map = {}
+    for _, row in ipairs(rows or {}) do
+        local name = normalizeCategoryName(row.name)
+        local folder = canonicalizePath(row.folder)
+        if name ~= "" and folder ~= "" then
+            map[name] = folder
+        end
+    end
+    CONFIG.category_folders = map
+    return map
+end
+
 -- =====================================================================
 -- REAPER API HELPERS -- kept small so the pure logic above stays testable
 -- =====================================================================
@@ -448,6 +536,68 @@ local function seedRandom()
         seed = seed + math.floor((reaper.time_precise() % 1) * 1000000)
     end
     math.randomseed(seed)
+end
+
+-- ---------------------------------------------------------------------
+-- Settings file I/O (used at startup and by the SFX: Settings action)
+-- ---------------------------------------------------------------------
+
+-- Directory of the running script (action or module), so the settings file can
+-- be found next to the scripts regardless of where they live. Mirrors the
+-- resolution used by the wrappers.
+local function scriptDirectory()
+    local _, filename = reaper.get_action_context()
+    if (not filename or filename == "") and debug and debug.getinfo then
+        local source = debug.getinfo(1, "S").source
+        filename = source:match("^@(.*)$") or source
+    end
+    if not filename or filename == "" then return "" end
+    return filename:match("^(.*[\\/])") or ""
+end
+
+-- Absolute path of the settings file (next to the scripts).
+local function configFilePath()
+    return scriptDirectory() .. CONFIG_FILENAME
+end
+
+-- Read a whole text file, or nil if it cannot be opened.
+local function readTextFile(path)
+    local file = io.open(path, "rb")
+    if not file then return nil end
+    local text = file:read("*a")
+    file:close()
+    return text
+end
+
+-- Overwrite a text file. Returns ok, err.
+local function writeTextFile(path, text)
+    local file, err = io.open(path, "wb")
+    if not file then return false, err end
+    local ok, writeErr = file:write(text)
+    file:close()
+    if not ok then return false, writeErr end
+    return true
+end
+
+-- Read category rows from the settings file, or nil when the file is missing.
+local function readCategoryRowsFromFile(path)
+    local text = readTextFile(path)
+    if not text then return nil end
+    return parseCategories(text)
+end
+
+-- Load the settings file over the built-in defaults. Returns true if a
+-- non-empty file was applied.
+local function loadCategoriesFromFile(path)
+    local rows = readCategoryRowsFromFile(path)
+    if not rows or #rows == 0 then return false end
+    applyCategoryRows(rows)
+    return true
+end
+
+-- Write rows to the settings file. Returns ok, err.
+local function saveCategories(path, rows)
+    return writeTextFile(path, serializeCategories(rows))
 end
 
 -- =====================================================================
@@ -641,6 +791,14 @@ end
 -- ENTRY POINT / MODULE HOOK
 -- =====================================================================
 
+-- Apply the settings file (edited by the "SFX: Settings" action) over the
+-- built-in defaults. This runs on every script load, so configuration changes
+-- take effect on the next run. It is skipped outside REAPER (the unit tests),
+-- where `reaper` is undefined.
+if type(reaper) == "table" then
+    loadCategoriesFromFile(configFilePath())
+end
+
 -- When this file is loaded as a module -- by the automated tests, or by the
 -- action wrappers -- it must NOT run main(); it only returns its functions.
 -- Running it normally inside REAPER executes main().
@@ -650,6 +808,7 @@ end
 
 return {
     CONFIG = CONFIG,
+    CONFIG_FILENAME = CONFIG_FILENAME,
     ITEM_META = ITEM_META,
     PROJ_STATE_SECTION = PROJ_STATE_SECTION,
     BROWSE_NEXT = BROWSE_NEXT,
@@ -670,6 +829,16 @@ return {
     capitalize = capitalize,
     supportedFormatList = supportedFormatList,
     configuredCategories = configuredCategories,
+    normalizeCategoryName = normalizeCategoryName,
+    parseCategories = parseCategories,
+    serializeCategories = serializeCategories,
+    currentCategoryRows = currentCategoryRows,
+    applyCategoryRows = applyCategoryRows,
+    scriptDirectory = scriptDirectory,
+    configFilePath = configFilePath,
+    readCategoryRowsFromFile = readCategoryRowsFromFile,
+    loadCategoriesFromFile = loadCategoriesFromFile,
+    saveCategories = saveCategories,
     insertRandomForTrackAtPosition = insertRandomForTrackAtPosition,
     browseSample = browseSample,
     browseSelectedSample = browseSelectedSample,

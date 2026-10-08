@@ -44,8 +44,9 @@ No SWS, no `js_ReaScriptAPI`, no external files — REAPER's own API only.
 
 ## Installation
 
-Four production scripts are provided. **Keep all four in the same folder** — the
-action wrappers load `InsertRandomSFX.lua` from their own directory.
+Five production scripts are provided. **Keep all five in the same folder** — the
+action wrappers load `InsertRandomSFX.lua` from their own directory, and the
+settings window writes its file next to them.
 
 | Script | REAPER action (after loading) | Role |
 | --- | --- | --- |
@@ -53,19 +54,24 @@ action wrappers load `InsertRandomSFX.lua` from their own directory.
 | `scripts/InsertRandomSFXAtMouse.lua` | `SFX: Insert Random SFX At Mouse` | **Mouse-modifier action** |
 | `scripts/NextSample.lua` | `SFX: Next Sample` | Standard **Action** |
 | `scripts/PreviousSample.lua` | `SFX: Previous Sample` | Standard **Action** |
+| `scripts/SFXSettings.lua` | `SFX: Settings` | **Settings window** (edit categories and folders) |
 
 Steps:
 
 1. Clone or download the repository to a location you keep, for example
-   `D:/Tools/ReaperAutoAdd`.
-2. Locate the four scripts under `scripts/`.
+   `D:/Tools/ReaperAutoAdd`. By default the scripts live in REAPER's own
+   resource `Scripts` folder.
+2. Locate the five scripts under `scripts/`.
 3. In REAPER, open **Actions → Show action list…**
-4. Click **New action → Load ReaScript…** and load each of the four scripts:
+4. Click **New action → Load ReaScript…** and load each of the five scripts:
    - `scripts/InsertRandomSFX.lua`
    - `scripts/InsertRandomSFXAtMouse.lua`
    - `scripts/NextSample.lua`
    - `scripts/PreviousSample.lua`
-5. Configure the workflows you want:
+   - `scripts/SFXSettings.lua`
+5. Open `SFX: Settings` to set up your categories and folders (see
+   [Settings](#settings)).
+6. Configure the workflows you want:
    - assign `SFX: Insert Random SFX` to a keyboard shortcut / toolbar (optional),
    - assign `SFX: Insert Random SFX At Mouse` to the Alt+Left Click mouse
      modifiers (see [Mouse Modifier setup](#mouse-modifier-setup)),
@@ -78,10 +84,51 @@ and are not part of normal use.
 > Tip: REAPER's action list stores a reference to the scripts. If you move or
 > edit them later, re-run them from the action list.
 
+## Settings
+
+Run the **`SFX: Settings`** action to edit the category mapping from inside
+REAPER — no script editing required. The window lists one row per category:
+
+```text
+transition  ->  D:/SFX/Transitions
+gun         ->  D:/SFX/Guns
+impact      ->  D:/SFX/Impacts
+```
+
+Buttons: **Add** (asks for the track name, then opens REAPER's folder picker),
+**Edit** (rename / re-pick the folder; also opened by double-clicking a row),
+**Remove**, **Up** / **Down** (reorder; matching is by name, so order is only
+cosmetic), **Reload** (re-read from disk), **Save**, **Close**.
+
+Saving writes `SFXCategories.ini` **next to the scripts**. Every SFX action reads
+that file when it runs, so changes apply to the next action without reloading
+anything. The file is plain text and safe to edit by hand:
+
+```ini
+# REAPER Random SFX Inserter -- category mapping.
+# One line per category:  track name = folder
+transition = D:/SFX/Transitions
+gun = D:/SFX/Guns
+```
+
+Rules and behaviour:
+
+- The category name is the **track name**. Names are stored lower-case and
+  matched case-insensitively (`Gun`, `gun`, `GUN` all resolve to `gun`).
+- Duplicate names are rejected, and empty names are not saved.
+- If you delete a folder, saving warns you and lets you confirm or cancel.
+- If `SFXCategories.ini` does not exist (or is empty), the built-in defaults in
+  the script are used and shown in the window.
+
 ## Configuration
 
-All user-editable configuration lives in the `CONFIG` table at the top of
-`scripts/InsertRandomSFX.lua`.
+The category mapping can be changed either through the `SFX: Settings` action
+(recommended; see [Settings](#settings)) or by editing the `CONFIG` table at the
+top of `scripts/InsertRandomSFX.lua`.
+
+The `CONFIG.category_folders` table holds the **built-in defaults**. They are
+used only when no `SFXCategories.ini` exists. Once the settings file is
+present it overrides this table at startup.
 
 The important field is `category_folders`. **The key is the category ID (which
 is also the track name); the value is the folder on disk:**
@@ -219,6 +266,9 @@ You may also add the actions to a toolbar button.
 
 ## How it works
 
+- **Configuration is loaded at startup.** Each action reads
+  `SFXCategories.ini` (edited by `SFX: Settings`) next to the scripts and falls
+  back to the built-in `CONFIG.category_folders` defaults when it is missing.
 - **Configuration resolves track → category.** The selected track's name is
   matched case-insensitively against the configured category IDs.
 - **Library scanner** enumerates the category folder, keeps only supported audio
@@ -275,7 +325,7 @@ call these APIs yourself.
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| "Selected track is not a supported category." | The track name is not one of the `category_folders` keys. Rename the track to a configured category (case-insensitive). |
+| "Selected track is not a supported category." | The track name is not one of the `category_folders` keys. Rename the track to a configured category (case-insensitive), or run `SFX: Settings` to add it. |
 | "The &lt;category&gt; folder does not exist." | The configured path is wrong or not mounted. Use an absolute path with forward slashes. |
 | "No supported audio files found…" | The folder exists but contains no supported extensions directly inside it (subfolders are not scanned). Check the files and `supported_extensions`. |
 | Script does not appear in the Action List | Re-run **New action → Load ReaScript…** and re-select the file. Keep all four scripts in the same folder. |

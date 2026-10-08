@@ -37,9 +37,10 @@ case-insensitive**. Users can add more categories as configuration.
 
 Still open for later:
 
-- Decide whether to move the mapping from inline Lua to a small config file.
-- Consider a helper action that lists the configured categories, so users can
-  discover them.
+- ✅ Mapping moved out of inline Lua into `SFXCategories.ini`, edited by the
+  `SFX: Settings` window (Phase 4) — users no longer edit the script by hand.
+- ✅ The settings window lists the configured categories, so they are
+  discoverable.
 
 ## Phase 2 — Better randomisation 🚧 (immediate repeat done)
 
@@ -92,7 +93,8 @@ Done:
 Potentially, in rough priority:
 
 - **Project-level configuration** (per-project folder mapping).
-- **Global / user library configuration** (shared across projects).
+- ✅ **Global / user library configuration** — `SFXCategories.ini` next to the
+  scripts, shared across projects.
 - **Subfolders** — optional recursive lookup within a category.
 - **Favorites** and pinned samples.
 - **Preview** — audition a sample before or after insertion.
@@ -101,7 +103,7 @@ Potentially, in rough priority:
   inserted item to a nearby transient.
 - **Random gain / pitch / pan** and light humanisation.
 - **Metadata-driven filtering** — read tags/notes for filtering.
-- **UI** — a small settings panel, only if the config outgrows a table.
+- ✅ **UI** — the `SFX: Settings` window edits the category mapping.
 
 Each item should be justified by a real workflow need.
 

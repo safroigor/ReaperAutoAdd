@@ -24,3 +24,6 @@ desktop.ini
 
 # Local scratch
 /tmp/
+
+# Local settings written by the SFX: Settings window
+scripts/SFXCategories.ini

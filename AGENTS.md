@@ -37,7 +37,7 @@ key, get a suitable sound at the cursor.
 
 All shared logic lives in
 [`scripts/InsertRandomSFX.lua`](scripts/InsertRandomSFX.lua) (core module +
-standard action). Three thin wrappers call it.
+standard action). Three thin action wrappers and one settings window load it.
 
 **Insertion** — standard action, and Alt+click on **empty track lane** via
 [`InsertRandomSFXAtMouse.lua`](scripts/InsertRandomSFXAtMouse.lua):
@@ -76,6 +76,12 @@ The Alt+click wrapper decides between insertion and browsing from the item
 under the mouse (`GetItemFromPoint`): item present → browse next; no item →
 insert random. It never relies on the selection for browsing.
 
+**Settings** — [`SFXSettings.lua`](scripts/SFXSettings.lua) (action
+`SFX: Settings`) is a small `gfx` window that edits the track-name → folder
+mapping and writes `SFXCategories.ini` next to the scripts. The core reads that
+file at startup and applies it over the built-in `CONFIG.category_folders`
+defaults, so the mapping can be changed without editing any script.
+
 Supported formats: `.wav`, `.aif`, `.aiff`, `.flac`, `.ogg`, `.mp3`.
 
 Everything else in `docs/roadmap.md` is a plan, not a feature. Do not build it
@@ -95,6 +101,8 @@ Two shared operations, called by thin wrappers:
   Alt+click, item under mouse  ---------> browseSample(item, BROWSE_NEXT)
   NextSample.lua (selected item) -------> browseSample(item, BROWSE_NEXT)
   PreviousSample.lua (selected item) ---> browseSample(item, BROWSE_PREVIOUS)
+  SFXSettings.lua (settings action) ----> edits SFXCategories.ini
+                                          (core loads it at startup)
 
   insertRandomForTrackAtPosition:
       category -> folder -> files -> random pick -> insert
@@ -110,7 +118,9 @@ is a configuration change, not a logic change.
 
 The core script is organised into these layers so future growth stays cheap:
 
-1. **Configuration** — the `CONFIG` table. Users edit this; logic does not.
+1. **Configuration** — `CONFIG.category_folders` holds the built-in defaults;
+   the live mapping is loaded from `SFXCategories.ini` at startup (see below).
+   Logic never edits this.
 2. **Stored-state identifiers** — `ITEM_META` (`P_EXT:` keys),
    `PROJ_STATE_SECTION`, browse directions.
 3. **Pure helpers** — no REAPER API calls (extension parsing, category
@@ -124,7 +134,13 @@ The core script is organised into these layers so future growth stays cheap:
 
 Plus three thin **wrappers** (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`,
 `PreviousSample.lua`) that only resolve an entry point and call the shared
-function.
+function, and the **settings window** `SFXSettings.lua`, which uses the core's
+pure `parseCategories` / `serializeCategories` helpers and the file I/O helpers
+to read and write `SFXCategories.ini`.
+
+The settings file is loaded at the bottom of the core, before the module hook,
+only when the `reaper` global exists — so the Lua unit tests keep the inline
+defaults. The parser/serializer stay pure and tested.
 
 The core script ends with a documented **module hook**: when loaded with
 `_G.SFX_LOAD_AS_MODULE` set, it returns its functions instead of running
@@ -154,14 +170,17 @@ See `docs/architecture.md` for extension points.
 
 ## 5. Coding rules
 
-- Keep scripts **small and readable**. The implementation is two files on
-  purpose (core + thin mouse wrapper).
+- Keep scripts **small and readable**. The implementation is a small set of
+  files on purpose: the core, three thin action wrappers, and one settings
+  window.
 - **Avoid unnecessary abstraction.** Add a function when it isolates something
   real (an API call, an error path, a future extension point), not for symmetry.
 - **Isolate REAPER API interaction** in the "REAPER API HELPERS" section.
   Business logic must not call `reaper.*` directly.
-- **Keep configuration separate from logic** where practical. `CONFIG` is data;
-  the functions consume it.
+- **Keep configuration separate from logic.** `CONFIG.category_folders` holds
+  the built-in defaults; the live mapping comes from `SFXCategories.ini`
+  (edited by `SFX: Settings`). Parsing/serialization stays pure and unit-tested;
+  configuration loading must never run when `reaper` is absent (the tests).
 - **Do not introduce external dependencies** without a strong, documented
   reason.
 - **Preserve REAPER undo behaviour.** Any state-changing operation goes inside
@@ -215,10 +234,11 @@ See `docs/architecture.md` for extension points.
 ## 6. Development workflow
 
 1. **Read** `AGENTS.md`, `docs/architecture.md` and the relevant source.
-2. **Modify** `scripts/InsertRandomSFX.lua` (core) and/or the wrappers
+2. **Modify** `scripts/InsertRandomSFX.lua` (core), the wrappers
    (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`, `PreviousSample.lua`), or
-   add files under `scripts/`. Keep all scripts in the same directory: the
-   wrappers load the core by relative path.
+   the settings window (`SFXSettings.lua`), or add files under `scripts/`. Keep
+   all scripts in the same directory: the wrappers load the core by relative
+   path and the settings window writes `SFXCategories.ini` there.
 3. **Run the automated tests** from the repository root:
 
    ```sh
@@ -233,6 +253,7 @@ See `docs/architecture.md` for extension points.
    luac -p scripts/InsertRandomSFXAtMouse.lua
    luac -p scripts/NextSample.lua
    luac -p scripts/PreviousSample.lua
+   luac -p scripts/SFXSettings.lua
    ```
 
    The REAPER APIs (insertion, edit cursor, metadata, project state, source
@@ -247,17 +268,17 @@ See `docs/architecture.md` for extension points.
 7. Keep commits small and focused; explain the REAPER-side verification you
    performed.
 
-If you change `CONFIG` keys, update the README's configuration section at the
-same time.
+If you change `CONFIG` keys or the settings-file format, update the README's
+configuration/settings section and the tests at the same time.
 
 ## 7. Future direction
 
 These are **ideas, not requirements**. Do not implement them unless the task
 explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
 
-- **Configurable category mapping** — categories defined in a data file rather
-  than inline Lua, if it stays simple. (Multiple inline categories are already
-  implemented — Phase 1.)
+- **Configurable category mapping** — ✅ implemented: `SFXCategories.ini` in a
+  data file plus the `SFX: Settings` window. (Multiple inline categories were
+  Phase 1.)
 - **Additional mouse contexts** — item edge / fade / "Media item bottom half"
   bindings, only if a real workflow needs them. (Alt+left-click on the Track and
   Media item contexts is already implemented — Phase 3.)
@@ -267,11 +288,11 @@ explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
   (Immediate-repeat avoidance is already implemented — Phase 2.)
 - **Subfolders** — optional recursive lookup within a category folder.
 - **Configuration levels** — project-specific config, per-user/global library
-  config.
+  config. (Global config is done; per-project is still open.)
 - **Preview** — audition before/after insertion.
 - **Parameter randomisation** — random gain, pitch, pan.
 - **Batch insertion** — several items at once.
 - **Metadata-driven filtering** — read tags/notes for filtering.
-- **UI/settings** — a small settings window if configuration outgrows a table.
+- **UI/settings** — ✅ implemented as the `SFX: Settings` window.
 - **Native extension** — only if ReaScript eventually proves insufficient for
   the workflow (for example, true mouse hooks). Explicitly out of scope now.

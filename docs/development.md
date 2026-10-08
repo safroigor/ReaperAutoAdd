@@ -24,6 +24,8 @@ scripts/InsertRandomSFX.lua        core module + standard action
 scripts/InsertRandomSFXAtMouse.lua Alt+click wrapper (loads the core module)
 scripts/NextSample.lua             "SFX: Next Sample" wrapper
 scripts/PreviousSample.lua         "SFX: Previous Sample" wrapper
+scripts/SFXSettings.lua            "SFX: Settings" gfx window (config editor)
+scripts/SFXCategories.ini          created by the settings window (not committed)
 tests/run_tests.lua                unit tests for the pure logic
 docs/                              architecture, development, roadmap
 ```
@@ -32,9 +34,10 @@ docs/                              architecture, development, roadmap
 
 1. Open the repository in an editor of your choice.
 2. In REAPER: **Actions → Show action list… → New action → Load ReaScript…**
-   and load all four scripts.
-3. Keep all four files in the **same folder** — the wrappers load the core
-   module from their own directory.
+   and load all five scripts.
+3. Keep all five files in the **same folder** — the wrappers load the core
+   module from their own directory and the settings window writes its file next
+   to them.
 4. Optionally assign a keyboard shortcut to the standard action.
 
 ### Mouse-modifier setup for the Alt+click workflow
@@ -99,6 +102,9 @@ of executing `main()`. Coverage includes:
 - **browse stepping** with wrap-around and safe handling of an unknown/one-file
   library (`findPathIndex` + `browseIndex`), i.e. the same composition
   `browseSample(item, direction)` performs;
+- **settings-file parsing/serialization** (`parseCategories` /
+  `serializeCategories` / `normalizeCategoryName` / `applyCategoryRows`), the
+  same helpers `SFXSettings.lua` uses;
 - stored-state identifiers and the exported shared functions
   (`insertRandomForTrackAtPosition`, `browseSample`, `browseSelectedSample`,
   `setEditCursorToItemStart`).
@@ -113,6 +119,7 @@ luac -p scripts/InsertRandomSFX.lua
 luac -p scripts/InsertRandomSFXAtMouse.lua
 luac -p scripts/NextSample.lua
 luac -p scripts/PreviousSample.lua
+luac -p scripts/SFXSettings.lua
 ```
 
 If you add pure logic, add tests for it. If a helper needs the REAPER API,
@@ -154,6 +161,29 @@ instead of testing it only manually.
 | 14 | **Per-category repeat state** | Insert from `gun`, then from `impact`, then `gun` | The `impact` pick does not affect `gun`'s memory |
 | 15 | **One-file library** | Category folder with a single file, insert several times | Same file inserted repeatedly; no error |
 | 16 | **State persistence** | Insert, then run the action again (new script run) | The previous pick is still avoided |
+
+## Manual test cases — settings window (`SFX: Settings`)
+
+Run the `SFX: Settings` action. The config file (`SFXCategories.ini`) lives next
+to the scripts.
+
+| # | Scenario | Action | Expected |
+| --- | --- | --- | --- |
+| S1 | First open | Run `SFX: Settings` with no config file | Window shows the built-in defaults; status says no settings file yet |
+| S2 | Add | Click Add, enter a name, pick a folder | New row appears, marked "Remember to Save" |
+| S3 | Save | Click Save | `SFXCategories.ini` is created next to the scripts; status confirms |
+| S4 | Applies to insertion | Save new category `door`, create+select a `door` track, insert | Random file inserted from the chosen folder |
+| S5 | Edit | Double-click a row, rename and re-pick the folder | Row updated |
+| S6 | Remove | Select a row, click Remove | Row disappears; Save persists the removal |
+| S7 | Reorder | Use Up/Down | Rows move; order is cosmetic (matching is by name) |
+| S8 | Duplicate name | Add/Edit to an existing name (any case) | Refused with "already exists"; not saved |
+| S9 | Empty name | Confirm empty input in the name dialog | Not added; clear status |
+| S10 | Missing folder | Add a row whose folder does not exist, Save | Warning listing the folder(s); Save anyway / cancel |
+| S11 | Reload | Edit the `.ini` externally, click Reload | Window reflects the file; unsaved changes discarded |
+| S12 | Dirty close | Make a change, click Close | Asks to discard; Cancel keeps the window open |
+| S13 | ESC / window close | Press ESC or close the OS window | Window closes without saving |
+| S14 | Long list | Add more rows than fit | Mouse wheel scrolls; selection stays visible |
+| S15 | Read-only folder | Point the script dir at a read-only location, Save | Clear write-error status; nothing else changes |
 
 ## Manual test cases — sample browsing
 

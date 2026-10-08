@@ -256,6 +256,72 @@ check("pathsEqual: trailing slash folder",
     Sfx.pathsEqual("D:/SFX/Guns/", "D:/SFX/Guns"))
 
 -- ---------------------------------------------------------------------
+-- Configuration file parsing / serialization (edited by SFXSettings.lua)
+-- ---------------------------------------------------------------------
+
+equals("normalizeCategoryName: trim + lower",
+    Sfx.normalizeCategoryName("  Gun  "), "gun")
+equals("normalizeCategoryName: non-string",
+    Sfx.normalizeCategoryName(nil), "")
+
+local parsed = Sfx.parseCategories([[
+# comment
+; another comment
+
+transition = D:/SFX/Transitions
+gun=C:\SFX\Guns\
+impact =  D:/SFX//Impacts
+
+bad line without equals
+= D:/SFX/NoName
+emptyfolder =
+]])
+equals("parseCategories: count", #parsed, 3)
+equals("parseCategories: first name", parsed[1].name, "transition")
+equals("parseCategories: first folder", parsed[1].folder, "D:/SFX/Transitions")
+equals("parseCategories: canonical folder", parsed[2].folder, "C:/SFX/Guns")
+equals("parseCategories: collapsed slashes", parsed[3].folder, "D:/SFX/Impacts")
+
+local dupes = Sfx.parseCategories("Gun = D:/a\ngun = D:/b\n")
+equals("parseCategories: duplicate keeps first", #dupes, 1)
+equals("parseCategories: duplicate folder", dupes[1].folder, "D:/a")
+equals("parseCategories: non-string", #Sfx.parseCategories(nil), 0)
+
+local serialized = Sfx.serializeCategories({
+    { name = "Gun", folder = "D:\\SFX\\Guns\\" },
+    { name = " transition ", folder = "D:/SFX/Transitions" },
+    { name = "", folder = "D:/ignored" },
+})
+equals("serializeCategories: starts with a comment",
+    serialized:sub(1, 1), "#")
+check("serializeCategories: writes normalized line",
+    serialized:find("gun = D:/SFX/Guns", 1, true) ~= nil)
+check("serializeCategories: writes second line",
+    serialized:find("transition = D:/SFX/Transitions", 1, true) ~= nil)
+check("serializeCategories: skips empty name",
+    serialized:find("ignored", 1, true) == nil)
+
+local roundTrip = Sfx.parseCategories(serialized)
+equals("serialize->parse round trip: count", #roundTrip, 2)
+equals("serialize->parse round trip: name", roundTrip[1].name, "gun")
+equals("serialize->parse round trip: folder", roundTrip[1].folder, "D:/SFX/Guns")
+
+-- currentCategoryRows reflects the built-in defaults (no REAPER here).
+local defaultRows = Sfx.currentCategoryRows()
+equals("currentCategoryRows: count", #defaultRows, 5)
+equals("currentCategoryRows: sorted first", defaultRows[1].name, "footstep")
+
+-- applyCategoryRows replaces the mapping; restore it for any later tests.
+local savedFolders = Sfx.CONFIG.category_folders
+Sfx.applyCategoryRows({ { name = "Door", folder = "D:/SFX/Doors/" } })
+equals("applyCategoryRows: key", Sfx.configuredCategories()[1], "door")
+equals("applyCategoryRows: resolve new",
+    Sfx.resolveCategoryFromTrackName("DOOR"), "door")
+equals("applyCategoryRows: old key gone",
+    Sfx.resolveCategoryFromTrackName("gun"), nil)
+Sfx.CONFIG.category_folders = savedFolders
+
+-- ---------------------------------------------------------------------
 -- sortPaths / findPathIndex
 -- ---------------------------------------------------------------------
 
@@ -350,6 +416,26 @@ check("module exports browseSample", type(Sfx.browseSample) == "function")
 check("module exports browseSelectedSample", type(Sfx.browseSelectedSample) == "function")
 check("module exports setEditCursorToItemStart",
     type(Sfx.setEditCursorToItemStart) == "function")
+
+-- Settings-file surface used by SFXSettings.lua.
+check("module exports normalizeCategoryName",
+    type(Sfx.normalizeCategoryName) == "function")
+check("module exports parseCategories",
+    type(Sfx.parseCategories) == "function")
+check("module exports serializeCategories",
+    type(Sfx.serializeCategories) == "function")
+check("module exports currentCategoryRows",
+    type(Sfx.currentCategoryRows) == "function")
+check("module exports applyCategoryRows",
+    type(Sfx.applyCategoryRows) == "function")
+check("module exports configFilePath",
+    type(Sfx.configFilePath) == "function")
+check("module exports readCategoryRowsFromFile",
+    type(Sfx.readCategoryRowsFromFile) == "function")
+check("module exports saveCategories",
+    type(Sfx.saveCategories) == "function")
+check("module exposes CONFIG_FILENAME",
+    type(Sfx.CONFIG_FILENAME) == "string" and Sfx.CONFIG_FILENAME ~= "")
 
 -- ---------------------------------------------------------------------
 -- Summary

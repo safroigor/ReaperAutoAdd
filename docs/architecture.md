@@ -14,10 +14,11 @@ Four scripts; all shared logic lives in the core:
 | `scripts/InsertRandomSFXAtMouse.lua` | Wrapper: Alt+click. If an item is under the mouse → `browseSample(item, BROWSE_NEXT)`; otherwise → insert at the mouse time. |
 | `scripts/NextSample.lua` | Wrapper: `browseSelectedSample(BROWSE_NEXT)`. |
 | `scripts/PreviousSample.lua` | Wrapper: `browseSelectedSample(BROWSE_PREVIOUS)`. |
+| `scripts/SFXSettings.lua` | Settings window (`gfx`): edits the category→folder mapping and writes `SFXCategories.ini`. |
 
 The wrappers contain no category/folder/undo logic. Each loads the core with
 `loadfile`, setting `_G.SFX_LOAD_AS_MODULE` so the core returns its functions
-instead of running `main()`. **All four files must stay in the same directory.**
+instead of running `main()`. **All five files must stay in the same directory.**
 
 ```text
   Entry point                              Shared operation
@@ -35,6 +36,8 @@ instead of running `main()`. **All four files must stay in the same directory.**
 
   NextSample.lua      (selected item) ---> browseSelectedSample(BROWSE_NEXT)
   PreviousSample.lua  (selected item) ---> browseSelectedSample(BROWSE_PREVIOUS)
+  SFXSettings.lua     (Settings action) -> reads/writes SFXCategories.ini
+                                            (config loaded by the core at startup)
 
   insertRandomForTrackAtPosition:
       category -> folder -> files -> random pick -> insert
@@ -48,9 +51,11 @@ instead of running `main()`. **All four files must stay in the same directory.**
 
 `scripts/InsertRandomSFX.lua` is organised as:
 
-### 1. Configuration (`CONFIG`)
+### 1. Configuration (`CONFIG` + `SFXCategories.ini`)
 
-The only place users edit:
+`CONFIG` holds the **built-in defaults**. The live mapping normally comes from
+`SFXCategories.ini`, a small text file next to the scripts that is edited by the
+`SFX: Settings` action and loaded at startup (see below).
 
 - `category_folders` — the **track name → folder** map (single source of truth
   for routing). The key is the REAPER track name (the category); the value is
@@ -71,6 +76,14 @@ The only place users edit:
 
 No business logic mentions any specific category name; categories exist only as
 rows in this table.
+
+**Configuration file.** `CONFIG_FILENAME` (`SFXCategories.ini`) lives next to
+the scripts. Its format is one `track name = folder` line per category (`#`/`;`
+comments and blank lines ignored). At the bottom of the core, before the module
+hook, `loadCategoriesFromFile(configFilePath())` runs — only when the `reaper`
+global exists, so the Lua unit tests keep the inline defaults. A non-empty file
+replaces `CONFIG.category_folders` through `applyCategoryRows`. The settings
+window writes the same format through `saveCategories`.
 
 ### 2. Stored-state identifiers
 
@@ -102,6 +115,12 @@ Deterministic, side-effect-free functions covered by `tests/run_tests.lua`:
 | `capitalize(word)` | used for the undo description |
 | `supportedFormatList()` | human-readable format list for errors |
 | `configuredCategories()` | sorted category keys for errors |
+| `trim(text)` | surrounding-whitespace trim |
+| `normalizeCategoryName(name)` | trim + lower-case a category/track name |
+| `parseCategories(text)` | settings text → ordered `{name, folder}` rows |
+| `serializeCategories(rows)` | rows → settings text |
+| `currentCategoryRows()` | current `CONFIG.category_folders` as sorted rows |
+| `applyCategoryRows(rows)` | replace `CONFIG.category_folders` with rows |
 
 The directory/file enumerators are **injectable** (they default to the REAPER
 API), which is what makes these functions testable without REAPER.
@@ -123,6 +142,12 @@ A thin boundary around `reaper.*`:
 | `refreshItem(item)` | after a source swap: mark the item's track dirty, refresh the item, redraw |
 | `setEditCursorToItemStart(item)` | `SetEditCurPos` to the item's `D_POSITION` |
 | `seedRandom()` | seed the RNG with time + high-resolution time |
+| `scriptDirectory()` | directory of the running script (for the config file) |
+| `configFilePath()` | absolute path of `SFXCategories.ini` |
+| `readTextFile` / `writeTextFile` | small `io.open` wrappers |
+| `readCategoryRowsFromFile(path)` | parse the settings file, or nil if missing |
+| `loadCategoriesFromFile(path)` | apply the settings file over the defaults |
+| `saveCategories(path, rows)` | write rows to the settings file |
 
 ### 5. Shared operations
 
@@ -226,9 +251,10 @@ its exact start is preserved. Volume, pan and mute are untouched.
 
 | Future feature | Touch point |
 | --- | --- |
-| Additional categories | add rows to `CONFIG.category_folders` |
+| Additional categories | `SFX: Settings` (or rows in `CONFIG.category_folders`) |
 | Fuzzy/partial track matching | `resolveCategoryFromTrackName` |
-| Config file instead of inline table | replace the literal `CONFIG` table |
+| Different config-file format | `parseCategories` / `serializeCategories`, `CONFIG_FILENAME` |
+| Adjust the settings window | `SFXSettings.lua` |
 | Long-term history / weighting | the selection step in `insertRandomForTrackAtPosition`; add a pure helper |
 | Recursive subfolders | `collectSupportedAudioFiles` |
 | Random gain/pitch/pan | a new step after `insertMediaOnTrack` |
@@ -237,6 +263,7 @@ its exact start is preserved. Volume, pan and mute are untouched.
 
 ## Non-goals (for now)
 
-No GUI, database, external service, project sync, mouse hooks, transient/peak
-detection, audio analysis, automatic folder discovery, or native extension. See
-`docs/roadmap.md`.
+No general-purpose GUI, database, external service, project sync, mouse hooks,
+transient/peak detection, audio analysis, automatic folder discovery, or native
+extension. The `SFX: Settings` window is a small, focused exception that edits
+the category mapping only. See `docs/roadmap.md`.
