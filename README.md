@@ -59,6 +59,12 @@ settings window writes its settings file into the same Scripts resource folder.
 | `scripts/PreviousSample.lua` | `SFX: Previous Sample` | Standard **Action** |
 | `scripts/InsertRandomSFX_Settings.lua` | `SFX: Settings` | **Settings window** (edit categories and folders) |
 
+> The action **name** in the list comes from the script's `@description` line
+> (`SFX: Settings`), not from the **file** name
+> (`InsertRandomSFX_Settings.lua`). After renaming or updating a script, remove
+> the old entry in the Actions window and load the file again so the name is
+> re-read.
+
 Steps:
 
 1. Clone or download the repository to a location you keep, for example
