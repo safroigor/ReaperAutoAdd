@@ -14,7 +14,7 @@ Four scripts; all shared logic lives in the core:
 | `scripts/InsertRandomSFXAtMouse.lua` | Wrapper: Alt+click. If an item is under the mouse → `browseSample(item, BROWSE_NEXT)`; otherwise → insert at the mouse time. |
 | `scripts/NextSample.lua` | Wrapper: `browseSelectedSample(BROWSE_NEXT)`. |
 | `scripts/PreviousSample.lua` | Wrapper: `browseSelectedSample(BROWSE_PREVIOUS)`. |
-| `scripts/SFXSettings.lua` | Settings window (`gfx`): edits the category→folder mapping and writes `InsertRandomSFX_Settings.ini`. |
+| `scripts/InsertRandomSFX_Settings.lua` | Settings window (`gfx`): edits the category→folder mapping and writes `InsertRandomSFX_Settings.ini`. |
 
 The wrappers contain no category/folder/undo logic. Each loads the core with
 `loadfile`, setting `_G.SFX_LOAD_AS_MODULE` so the core returns its functions
@@ -36,8 +36,8 @@ instead of running `main()`. **All five files must stay in the same directory.**
 
   NextSample.lua      (selected item) ---> browseSelectedSample(BROWSE_NEXT)
   PreviousSample.lua  (selected item) ---> browseSelectedSample(BROWSE_PREVIOUS)
-  SFXSettings.lua     (Settings action) -> reads/writes InsertRandomSFX_Settings.ini
-                                            (config loaded by the core at startup)
+  InsertRandomSFX_Settings.lua (Settings action)
+    -> reads/writes InsertRandomSFX_Settings.ini (core loads it at startup)
 
   insertRandomForTrackAtPosition:
       category -> folder -> files -> random pick -> insert
@@ -260,7 +260,7 @@ its exact start is preserved. Volume, pan and mute are untouched.
 | Additional categories | `SFX: Settings` (or rows in `CONFIG.category_folders`) |
 | Fuzzy/partial track matching | `resolveCategoryFromTrackName` |
 | Different config-file format | `parseCategories` / `serializeCategories`, `CONFIG_FILENAME` |
-| Adjust the settings window | `SFXSettings.lua` |
+| Adjust the settings window | `InsertRandomSFX_Settings.lua` |
 | Long-term history / weighting | the selection step in `insertRandomForTrackAtPosition`; add a pure helper |
 | Recursive subfolders | `collectSupportedAudioFiles` |
 | Random gain/pitch/pan | a new step after `insertMediaOnTrack` |

@@ -256,7 +256,7 @@ check("pathsEqual: trailing slash folder",
     Sfx.pathsEqual("D:/SFX/Guns/", "D:/SFX/Guns"))
 
 -- ---------------------------------------------------------------------
--- Configuration file parsing / serialization (edited by SFXSettings.lua)
+-- Configuration file parsing / serialization (edited by InsertRandomSFX_Settings.lua)
 -- ---------------------------------------------------------------------
 
 equals("normalizeCategoryName: trim + lower",
@@ -417,7 +417,7 @@ check("module exports browseSelectedSample", type(Sfx.browseSelectedSample) == "
 check("module exports setEditCursorToItemStart",
     type(Sfx.setEditCursorToItemStart) == "function")
 
--- Settings-file surface used by SFXSettings.lua.
+-- Settings-file surface used by InsertRandomSFX_Settings.lua.
 check("module exports normalizeCategoryName",
     type(Sfx.normalizeCategoryName) == "function")
 check("module exports parseCategories",

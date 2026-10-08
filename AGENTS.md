@@ -76,7 +76,8 @@ The Alt+click wrapper decides between insertion and browsing from the item
 under the mouse (`GetItemFromPoint`): item present → browse next; no item →
 insert random. It never relies on the selection for browsing.
 
-**Settings** — [`SFXSettings.lua`](scripts/SFXSettings.lua) (action
+**Settings** —
+[`InsertRandomSFX_Settings.lua`](scripts/InsertRandomSFX_Settings.lua) (action
 `SFX: Settings`) is a small `gfx` window that edits the track-name → folder
 mapping and writes `InsertRandomSFX_Settings.ini` next to the scripts. The core
 reads that file at startup and applies it over the built-in
@@ -102,7 +103,7 @@ Two shared operations, called by thin wrappers:
   Alt+click, item under mouse  ---------> browseSample(item, BROWSE_NEXT)
   NextSample.lua (selected item) -------> browseSample(item, BROWSE_NEXT)
   PreviousSample.lua (selected item) ---> browseSample(item, BROWSE_PREVIOUS)
-  SFXSettings.lua (settings action) ----> edits InsertRandomSFX_Settings.ini
+  InsertRandomSFX_Settings.lua (settings action) ----> edits InsertRandomSFX_Settings.ini
                                           (core loads it at startup)
 
   insertRandomForTrackAtPosition:
@@ -135,9 +136,9 @@ The core script is organised into these layers so future growth stays cheap:
 
 Plus three thin **wrappers** (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`,
 `PreviousSample.lua`) that only resolve an entry point and call the shared
-function, and the **settings window** `SFXSettings.lua`, which uses the core's
-pure `parseCategories` / `serializeCategories` helpers and the file I/O helpers
-to read and write `InsertRandomSFX_Settings.ini`.
+function, and the **settings window** `InsertRandomSFX_Settings.lua`, which uses
+the core's pure `parseCategories` / `serializeCategories` helpers and the file
+I/O helpers to read and write `InsertRandomSFX_Settings.ini`.
 
 The settings file is loaded at the bottom of the core, before the module hook,
 only when the `reaper` global exists — so the Lua unit tests keep the inline
@@ -244,9 +245,10 @@ See `docs/architecture.md` for extension points.
 1. **Read** `AGENTS.md`, `docs/architecture.md` and the relevant source.
 2. **Modify** `scripts/InsertRandomSFX.lua` (core), the wrappers
    (`InsertRandomSFXAtMouse.lua`, `NextSample.lua`, `PreviousSample.lua`), or
-   the settings window (`SFXSettings.lua`), or add files under `scripts/`. Keep
-   all scripts in the same directory: the wrappers load the core by relative
-   path and the settings window writes `InsertRandomSFX_Settings.ini` there.
+   the settings window (`InsertRandomSFX_Settings.lua`), or add files under
+   `scripts/`. Keep all scripts in the same directory: the wrappers load the
+   core by relative path and the settings window writes
+   `InsertRandomSFX_Settings.ini` there.
 3. **Run the automated tests** from the repository root:
 
    ```sh
@@ -261,7 +263,7 @@ See `docs/architecture.md` for extension points.
    luac -p scripts/InsertRandomSFXAtMouse.lua
    luac -p scripts/NextSample.lua
    luac -p scripts/PreviousSample.lua
-   luac -p scripts/SFXSettings.lua
+   luac -p scripts/InsertRandomSFX_Settings.lua
    ```
 
    The REAPER APIs (insertion, edit cursor, metadata, project state, source

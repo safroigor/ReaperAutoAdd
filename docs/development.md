@@ -24,8 +24,8 @@ scripts/InsertRandomSFX.lua        core module + standard action
 scripts/InsertRandomSFXAtMouse.lua Alt+click wrapper (loads the core module)
 scripts/NextSample.lua             "SFX: Next Sample" wrapper
 scripts/PreviousSample.lua         "SFX: Previous Sample" wrapper
-scripts/SFXSettings.lua            "SFX: Settings" gfx window (config editor)
-scripts/InsertRandomSFX_Settings.ini          created by the settings window (not committed)
+scripts/InsertRandomSFX_Settings.lua "SFX: Settings" gfx window (config editor)
+scripts/InsertRandomSFX_Settings.ini created by the settings window (not committed)
 tests/run_tests.lua                unit tests for the pure logic
 docs/                              architecture, development, roadmap
 ```
@@ -104,7 +104,7 @@ of executing `main()`. Coverage includes:
   `browseSample(item, direction)` performs;
 - **settings-file parsing/serialization** (`parseCategories` /
   `serializeCategories` / `normalizeCategoryName` / `applyCategoryRows`), the
-  same helpers `SFXSettings.lua` uses;
+  same helpers `InsertRandomSFX_Settings.lua` uses;
 - stored-state identifiers and the exported shared functions
   (`insertRandomForTrackAtPosition`, `browseSample`, `browseSelectedSample`,
   `setEditCursorToItemStart`).
@@ -119,7 +119,7 @@ luac -p scripts/InsertRandomSFX.lua
 luac -p scripts/InsertRandomSFXAtMouse.lua
 luac -p scripts/NextSample.lua
 luac -p scripts/PreviousSample.lua
-luac -p scripts/SFXSettings.lua
+luac -p scripts/InsertRandomSFX_Settings.lua
 ```
 
 If you add pure logic, add tests for it. If a helper needs the REAPER API,

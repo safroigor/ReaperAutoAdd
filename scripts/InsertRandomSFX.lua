@@ -115,7 +115,7 @@ local BROWSE_NEXT = 1
 local BROWSE_PREVIOUS = -1
 
 -- Name of the global settings file. It lives next to the scripts and is edited
--- through the "SFX: Settings" action (SFXSettings.lua). When present it
+-- through the "SFX: Settings" action (InsertRandomSFX_Settings.lua). When present it
 -- overrides the built-in CONFIG.category_folders defaults at startup, so users
 -- never have to edit this file by hand.
 local CONFIG_FILENAME = "InsertRandomSFX_Settings.ini"
@@ -301,7 +301,7 @@ local function configuredCategories()
 end
 
 -- ---------------------------------------------------------------------
--- Configuration file (InsertRandomSFX_Settings.ini, edited by SFXSettings.lua)
+-- Configuration file (InsertRandomSFX_Settings.ini, edited by InsertRandomSFX_Settings.lua)
 -- ---------------------------------------------------------------------
 
 -- Trim surrounding whitespace.

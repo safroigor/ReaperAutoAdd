@@ -1,8 +1,8 @@
 -- @description SFX: Settings
 -- @version 1.0
 --[[
-  SFXSettings.lua
-  ---------------
+  InsertRandomSFX_Settings.lua
+  ----------------------------
   Settings window for the "REAPER Random SFX Inserter". It edits the mapping
   between a category (the track name) and its folder on disk, so the mapping can
   be changed from inside REAPER instead of editing a script by hand.

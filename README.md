@@ -54,7 +54,7 @@ settings window writes its file next to them.
 | `scripts/InsertRandomSFXAtMouse.lua` | `SFX: Insert Random SFX At Mouse` | **Mouse-modifier action** |
 | `scripts/NextSample.lua` | `SFX: Next Sample` | Standard **Action** |
 | `scripts/PreviousSample.lua` | `SFX: Previous Sample` | Standard **Action** |
-| `scripts/SFXSettings.lua` | `SFX: Settings` | **Settings window** (edit categories and folders) |
+| `scripts/InsertRandomSFX_Settings.lua` | `SFX: Settings` | **Settings window** (edit categories and folders) |
 
 Steps:
 
@@ -68,7 +68,7 @@ Steps:
    - `scripts/InsertRandomSFXAtMouse.lua`
    - `scripts/NextSample.lua`
    - `scripts/PreviousSample.lua`
-   - `scripts/SFXSettings.lua`
+   - `scripts/InsertRandomSFX_Settings.lua`
 5. Open `SFX: Settings` to set up your categories and folders (see
    [Settings](#settings)).
 6. Configure the workflows you want:
