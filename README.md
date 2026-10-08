@@ -12,6 +12,9 @@ No SWS, no `js_ReaScriptAPI`, no external files — REAPER's own API only.
 
 - **Track-name → SFX category mapping.** A track's name is treated as a category
   and resolved against the configured categories (case-insensitively).
+- **In-REAPER settings window** (`SFX: Settings`) to add, edit and remove
+  categories/folders — no script editing. Stored in
+  `InsertRandomSFX_Settings.ini`.
 - **Random SFX insertion** from the category's folder.
 - **Alt+Left Click on empty track area** → insert a random SFX at the mouse's
   timeline position.
@@ -78,9 +81,6 @@ Steps:
    - `SFX: Next Sample` / `SFX: Previous Sample` can be left as Action-List
      actions or given shortcuts.
 
-**Do not load anything from `debug/`.** Those files are diagnostic experiments
-and are not part of normal use.
-
 > Tip: REAPER's action list stores a reference to the scripts. If you move or
 > edit them later, re-run them from the action list.
 
@@ -101,9 +101,10 @@ Buttons: **Add** (asks for the track name, then opens REAPER's folder picker),
 cosmetic), **Reload** (re-read from disk), **Save**, **Close**.
 
 Saving writes `InsertRandomSFX_Settings.ini` into **REAPER's Scripts resource
-folder** (next to the scripts by default). Every SFX action reads
-that file when it runs, so changes apply to the next action without reloading
-anything. The file is plain text and safe to edit by hand:
+folder** (next to the scripts by default; find it via
+**Options → Show REAPER resource path**). Every SFX action reads that file when
+it runs, so changes apply to the next action without reloading anything. The file
+is plain text and safe to edit by hand:
 
 ```ini
 # REAPER Random SFX Inserter -- category mapping.
@@ -118,8 +119,8 @@ Rules and behaviour:
   matched case-insensitively (`Gun`, `gun`, `GUN` all resolve to `gun`).
 - Duplicate names are rejected, and empty names are not saved.
 - If you delete a folder, saving warns you and lets you confirm or cancel.
-- If `InsertRandomSFX_Settings.ini` does not exist (or is empty), the built-in defaults in
-  the script are used and shown in the window.
+- If `InsertRandomSFX_Settings.ini` does not exist (or is empty), the built-in
+  defaults in the script are used and shown in the window.
 
 ## Configuration
 
@@ -269,8 +270,8 @@ You may also add the actions to a toolbar button.
 
 - **Configuration is loaded at startup.** Each action reads
   `InsertRandomSFX_Settings.ini` (edited by `SFX: Settings`) in REAPER's Scripts
-  resource folder and falls
-  back to the built-in `CONFIG.category_folders` defaults when it is missing.
+  resource folder and falls back to the built-in `CONFIG.category_folders`
+  defaults when it is missing.
 - **Configuration resolves track → category.** The selected track's name is
   matched case-insensitively against the configured category IDs.
 - **Library scanner** enumerates the category folder, keeps only supported audio
@@ -327,10 +328,11 @@ call these APIs yourself.
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| "Selected track is not a supported category." | The track name is not one of the `category_folders` keys. Rename the track to a configured category (case-insensitive), or run `SFX: Settings` to add it. |
+| "Selected track is not a supported category." | The track name is not one of the `category_folders` keys. Rename the track to a configured category (case-insensitive), or run `SFX: Settings` to add it. The message also shows the settings file path and whether it was found. |
 | "The &lt;category&gt; folder does not exist." | The configured path is wrong or not mounted. Use an absolute path with forward slashes. |
 | "No supported audio files found…" | The folder exists but contains no supported extensions directly inside it (subfolders are not scanned). Check the files and `supported_extensions`. |
-| Script does not appear in the Action List | Re-run **New action → Load ReaScript…** and re-select the file. Keep all four scripts in the same folder. |
+| Settings saved in `SFX: Settings` but the category is still unknown | The category name must match the track name. The error message shows the settings file path — make sure the file exists at `…/REAPER/Scripts/InsertRandomSFX_Settings.ini`. |
+| Script does not appear in the Action List | Re-run **New action → Load ReaScript…** and re-select the file. Keep all five scripts in the same folder. |
 | Alt+Left Click does nothing | The mouse modifier is not set in **both** the **Track** and **Media item** contexts, or the click landed in an item sub-context (edge/fade). Add the action to that context too. |
 | Waveform not updating after browsing | Replacement builds the attached source's peaks; if it still looks stale, re-run the action. Verify the file has readable audio. |
 | Waveform missing right after inserting an item | This is fixed: inserted items build the new source's peaks immediately. Make sure you are running the current scripts. |
@@ -352,8 +354,6 @@ each operation in a single step.
   The tests require Lua 5.3+ but not REAPER. (The tests as written expect the
   five standard categories; extra local categories are outside their scope.)
 
-- `debug/` contains diagnostic experiments (clean-room scripts, probes). It is
-  **not required for normal use** — do not load anything from `debug/`.
 - Further documentation:
   - [`docs/architecture.md`](docs/architecture.md) — code structure and
     extension points.

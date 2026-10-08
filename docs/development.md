@@ -36,8 +36,9 @@ docs/                              architecture, development, roadmap
 2. In REAPER: **Actions → Show action list… → New action → Load ReaScript…**
    and load all five scripts.
 3. Keep all five files in the **same folder** — the wrappers load the core
-   module from their own directory and the settings window writes its file next
-   to them.
+   module from their own directory. The settings file
+   (`InsertRandomSFX_Settings.ini`) is written to REAPER's Scripts resource
+   folder (where the scripts live by default), so every action finds it.
 4. Optionally assign a keyboard shortcut to the standard action.
 
 ### Mouse-modifier setup for the Alt+click workflow
@@ -183,7 +184,9 @@ REAPER's Scripts resource folder.
 | S12 | Dirty close | Make a change, click Close | Asks to discard; Cancel keeps the window open |
 | S13 | ESC / window close | Press ESC or close the OS window | Window closes without saving |
 | S14 | Long list | Add more rows than fit | Mouse wheel scrolls; selection stays visible |
-| S15 | Read-only folder | Point the script dir at a read-only location, Save | Clear write-error status; nothing else changes |
+| S15 | Read-only folder | Make the Scripts resource folder read-only, Save | Clear write-error status; nothing else changes |
+| S16 | **Settings picked up by the other actions** | Save a new category in `SFX: Settings`, then run `SFX: Insert Random SFX` on a track with that name | The category is used (the insert does not say "not supported") |
+| S17 | **Wrong path diagnostic** | Rename/move `InsertRandomSFX_Settings.ini`, run insert on a custom track | Error lists supported names plus the settings file path and "NOT FOUND" |
 
 ## Manual test cases — sample browsing
 

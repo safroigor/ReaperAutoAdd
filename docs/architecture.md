@@ -55,8 +55,8 @@ instead of running `main()`. **All five files must stay in the same directory.**
 
 `CONFIG` holds the **built-in defaults**. The live mapping normally comes from
 `InsertRandomSFX_Settings.ini`, a small text file in REAPER's Scripts resource
-folder that is edited by the
-`SFX: Settings` action and loaded at startup (see below).
+folder that is edited by the `SFX: Settings` action and loaded at startup (see
+below).
 
 - `category_folders` — the **track name → folder** map (single source of truth
   for routing). The key is the REAPER track name (the category); the value is
@@ -78,13 +78,14 @@ folder that is edited by the
 No business logic mentions any specific category name; categories exist only as
 rows in this table.
 
-**Configuration file.** `CONFIG_FILENAME` (`InsertRandomSFX_Settings.ini`) lives in
-REAPER's Scripts resource folder. Its format is one `track name = folder` line per category (`#`/`;`
-comments and blank lines ignored). At the bottom of the core, before the module
-hook, `loadCategoriesFromFile(configFilePath())` runs — only when the `reaper`
-global exists, so the Lua unit tests keep the inline defaults. A non-empty file
-replaces `CONFIG.category_folders` through `applyCategoryRows`. The settings
-window writes the same format through `saveCategories`.
+**Configuration file.** `CONFIG_FILENAME` (`InsertRandomSFX_Settings.ini`) lives
+in REAPER's Scripts resource folder, so every action resolves the same file
+regardless of which script runs. Its format is one `track name = folder` line per
+category (`#`/`;` comments and blank lines ignored). At the bottom of the core,
+before the module hook, `loadCategoriesFromFile(configFilePath())` runs — only
+when the `reaper` global exists, so the Lua unit tests keep the inline defaults.
+A non-empty file replaces `CONFIG.category_folders` through `applyCategoryRows`.
+The settings window writes the same format through `saveCategories`.
 
 ### 2. Stored-state identifiers
 
@@ -144,8 +145,10 @@ A thin boundary around `reaper.*`:
 | `refreshItem(item)` | after a source change: mark the item's track dirty, refresh the item, redraw |
 | `setEditCursorToItemStart(item)` | `SetEditCurPos` to the item's `D_POSITION` |
 | `seedRandom()` | seed the RNG with time + high-resolution time |
-| `scriptDirectory()` | directory of the running script (for the config file) |
-| `configFilePath()` | absolute path of `InsertRandomSFX_Settings.ini` |
+| `scriptDirectory()` | directory of the running script (fallback for the config file) |
+| `resourceScriptsDirectory()` | REAPER's Scripts resource folder |
+| `configFilePath()` | absolute path of `InsertRandomSFX_Settings.ini` (anchored to the resource Scripts folder) |
+| `configFileExists()` | whether the settings file exists at the resolved path |
 | `readTextFile` / `writeTextFile` | small `io.open` wrappers |
 | `readCategoryRowsFromFile(path)` | parse the settings file, or nil if missing |
 | `loadCategoriesFromFile(path)` | apply the settings file over the defaults |
