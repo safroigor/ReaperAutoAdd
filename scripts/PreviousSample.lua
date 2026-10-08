@@ -13,7 +13,7 @@
 
   Recommended mouse-wheel binding (see README.md > Sample browsing):
       Context: Media item   Behavior: mouse wheel down   Modifier: Alt
-      -> SFX: Previous Sample
+      -> PreviousSample.lua
 
   This is a thin wrapper: it only loads the shared core module
   (InsertRandomSFX.lua) and calls browseSample(). Keep both files together.

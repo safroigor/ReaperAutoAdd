@@ -12,7 +12,7 @@ No SWS, no `js_ReaScriptAPI`, no external files — REAPER's own API only.
 
 - **Track-name → SFX category mapping.** A track's name is treated as a category
   and resolved against the configured categories (case-insensitively).
-- **In-REAPER settings window** (`SFX: Settings`) to add, edit and remove
+- **In-REAPER settings window** (`InsertRandomSFX_Settings.lua`) to add, edit and remove
   categories/folders — no script editing. Stored in
   `InsertRandomSFX_Settings.ini`.
 - **Random SFX insertion** from the category's folder.
@@ -51,19 +51,18 @@ Five production scripts are provided. **Keep all five in the same folder** — t
 action wrappers load `InsertRandomSFX.lua` from their own directory, and the
 settings window writes its settings file into the same Scripts resource folder.
 
-| Script | REAPER action (after loading) | Role |
-| --- | --- | --- |
-| `scripts/InsertRandomSFX.lua` | `SFX: Insert Random SFX` | Standard **Action** (also the shared core module) |
-| `scripts/InsertRandomSFXAtMouse.lua` | `SFX: Insert Random SFX At Mouse` | **Mouse-modifier action** |
-| `scripts/NextSample.lua` | `SFX: Next Sample` | Standard **Action** |
-| `scripts/PreviousSample.lua` | `SFX: Previous Sample` | Standard **Action** |
-| `scripts/InsertRandomSFX_Settings.lua` | `SFX: Settings` | **Settings window** (edit categories and folders) |
+| Script | Role |
+| --- | --- |
+| `InsertRandomSFX.lua` | Standard **action** (also the shared core module) |
+| `InsertRandomSFXAtMouse.lua` | **Mouse-modifier action** |
+| `NextSample.lua` | Standard **action** |
+| `PreviousSample.lua` | Standard **action** |
+| `InsertRandomSFX_Settings.lua` | **Settings window** (edit categories and folders) |
 
-> The action **name** in the list comes from the script's `@description` line
-> (`SFX: Settings`), not from the **file** name
-> (`InsertRandomSFX_Settings.lua`). After renaming or updating a script, remove
-> the old entry in the Actions window and load the file again so the name is
-> re-read.
+> REAPER lists a ReaScript in the **Action List** by its **file name**, shown as
+> `Script: <file>.lua` — for example `Script: InsertRandomSFX_Settings.lua`.
+> Use that name to find and run the scripts; this README refers to them by their
+> file names.
 
 Steps:
 
@@ -78,13 +77,13 @@ Steps:
    - `scripts/NextSample.lua`
    - `scripts/PreviousSample.lua`
    - `scripts/InsertRandomSFX_Settings.lua`
-5. Open `SFX: Settings` to set up your categories and folders (see
+5. Open `InsertRandomSFX_Settings.lua` to set up your categories and folders (see
    [Settings](#settings)).
 6. Configure the workflows you want:
-   - assign `SFX: Insert Random SFX` to a keyboard shortcut / toolbar (optional),
-   - assign `SFX: Insert Random SFX At Mouse` to the Alt+Left Click mouse
+   - assign `InsertRandomSFX.lua` to a keyboard shortcut / toolbar (optional),
+   - assign `InsertRandomSFXAtMouse.lua` to the Alt+Left Click mouse
      modifiers (see [Mouse Modifier setup](#mouse-modifier-setup)),
-   - `SFX: Next Sample` / `SFX: Previous Sample` can be left as Action-List
+   - `NextSample.lua` / `PreviousSample.lua` can be left as Action-List
      actions or given shortcuts.
 
 > Tip: REAPER's action list stores a reference to the scripts. If you move or
@@ -92,8 +91,9 @@ Steps:
 
 ## Settings
 
-Run the **`SFX: Settings`** action to edit the category mapping from inside
-REAPER — no script editing required. The window lists one row per category:
+Run the **`InsertRandomSFX_Settings.lua`** script to edit the category mapping
+from inside REAPER — no script editing required. The window lists one row per
+category:
 
 ```text
 transition  ->  D:/SFX/Transitions
@@ -130,7 +130,7 @@ Rules and behaviour:
 
 ## Configuration
 
-The category mapping can be changed either through the `SFX: Settings` action
+The category mapping can be changed either through the `InsertRandomSFX_Settings.lua` action
 (recommended; see [Settings](#settings)) or by editing the `CONFIG` table at the
 top of `scripts/InsertRandomSFX.lua`.
 
@@ -195,7 +195,7 @@ message and nothing is changed.
 
 ### `InsertRandomSFX.lua`
 
-Direct action (`SFX: Insert Random SFX`):
+Direct action:
 
 - uses the **selected track**,
 - inserts a random SFX from that category's folder at the **current Edit Cursor
@@ -227,7 +227,7 @@ Moves the **selected** item to the **previous** sample in its stored library,
 wrapping from the first file to the last. The item is not moved; the new source
 sets the natural length. Single undo step.
 
-> `SFX: Next Sample` and `SFX: Previous Sample` operate on the **selected**
+> `NextSample.lua` and `PreviousSample.lua` operate on the **selected**
 > item. The Alt+Left Click gesture instead targets the **item under the mouse**
 > and needs no selection.
 
@@ -240,9 +240,9 @@ the pointer, so both bindings are required.
 In **Preferences → Editing Behavior → Mouse Modifiers**:
 
 1. Context: **Track** → Behavior: **left click** → Modifier: **Alt** →
-   `SFX: Insert Random SFX At Mouse`
+   `InsertRandomSFXAtMouse.lua`
 2. Context: **Media item** → Behavior: **left click** → Modifier: **Alt** →
-   `SFX: Insert Random SFX At Mouse`
+   `InsertRandomSFXAtMouse.lua`
 
 The same ReaScript is used in both contexts; it decides what to do from the item
 actually under the mouse.
@@ -266,18 +266,18 @@ keyboard):
 
 | Action | Example shortcut |
 | --- | --- |
-| `SFX: Insert Random SFX` | `Ctrl+Alt+I` |
-| `SFX: Next Sample` | `Alt+.` |
-| `SFX: Previous Sample` | `Alt+,` |
+| `InsertRandomSFX.lua` | `Ctrl+Alt+I` |
+| `NextSample.lua` | `Alt+.` |
+| `PreviousSample.lua` | `Alt+,` |
 
 You may also add the actions to a toolbar button.
 
 ## How it works
 
-- **Configuration is loaded at startup.** Each action reads
-  `InsertRandomSFX_Settings.ini` (edited by `SFX: Settings`) in REAPER's Scripts
-  resource folder and falls back to the built-in `CONFIG.category_folders`
-  defaults when it is missing.
+- **Configuration is loaded at startup.** Each script reads
+  `InsertRandomSFX_Settings.ini` (edited by `InsertRandomSFX_Settings.lua`) in
+  REAPER's Scripts resource folder and falls back to the built-in
+  `CONFIG.category_folders` defaults when it is missing.
 - **Configuration resolves track → category.** The selected track's name is
   matched case-insensitively against the configured category IDs.
 - **Library scanner** enumerates the category folder, keeps only supported audio
@@ -334,10 +334,10 @@ call these APIs yourself.
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| "Selected track is not a supported category." | The track name is not one of the `category_folders` keys. Rename the track to a configured category (case-insensitive), or run `SFX: Settings` to add it. The message also shows the settings file path and whether it was found. |
+| "Selected track is not a supported category." | The track name is not one of the `category_folders` keys. Rename the track to a configured category (case-insensitive), or run `InsertRandomSFX_Settings.lua` to add it. The message also shows the settings file path and whether it was found. |
 | "The &lt;category&gt; folder does not exist." | The configured path is wrong or not mounted. Use an absolute path with forward slashes. |
 | "No supported audio files found…" | The folder exists but contains no supported extensions directly inside it (subfolders are not scanned). Check the files and `supported_extensions`. |
-| Settings saved in `SFX: Settings` but the category is still unknown | The category name must match the track name. The error message shows the settings file path — make sure the file exists at `…/REAPER/Scripts/InsertRandomSFX_Settings.ini`. |
+| Settings saved via `InsertRandomSFX_Settings.lua` but the category is still unknown | The category name must match the track name. The error message shows the settings file path — make sure the file exists at `…/REAPER/Scripts/InsertRandomSFX_Settings.ini`. |
 | Script does not appear in the Action List | Re-run **New action → Load ReaScript…** and re-select the file. Keep all five scripts in the same folder. |
 | Alt+Left Click does nothing | The mouse modifier is not set in **both** the **Track** and **Media item** contexts, or the click landed in an item sub-context (edge/fade). Add the action to that context too. |
 | Waveform not updating after browsing | Replacement builds the attached source's peaks; if it still looks stale, re-run the action. Verify the file has readable audio. |

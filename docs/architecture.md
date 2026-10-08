@@ -55,8 +55,8 @@ instead of running `main()`. **All five files must stay in the same directory.**
 
 `CONFIG` holds the **built-in defaults**. The live mapping normally comes from
 `InsertRandomSFX_Settings.ini`, a small text file in REAPER's Scripts resource
-folder that is edited by the `SFX: Settings` action and loaded at startup (see
-below).
+folder that is edited by the `InsertRandomSFX_Settings.lua` script and loaded at
+startup (see below).
 
 - `category_folders` — the **track name → folder** map (single source of truth
   for routing). The key is the REAPER track name (the category); the value is
@@ -261,7 +261,7 @@ its exact start is preserved. Volume, pan and mute are untouched.
 
 | Future feature | Touch point |
 | --- | --- |
-| Additional categories | `SFX: Settings` (or rows in `CONFIG.category_folders`) |
+| Additional categories | `InsertRandomSFX_Settings.lua` (or rows in `CONFIG.category_folders`) |
 | Fuzzy/partial track matching | `resolveCategoryFromTrackName` |
 | Different config-file format | `parseCategories` / `serializeCategories`, `CONFIG_FILENAME` |
 | Adjust the settings window | `InsertRandomSFX_Settings.lua` |
@@ -275,5 +275,5 @@ its exact start is preserved. Volume, pan and mute are untouched.
 
 No general-purpose GUI, database, external service, project sync, mouse hooks,
 transient/peak detection, audio analysis, automatic folder discovery, or native
-extension. The `SFX: Settings` window is a small, focused exception that edits
-the category mapping only. See `docs/roadmap.md`.
+extension. The `InsertRandomSFX_Settings.lua` window is a small, focused
+exception that edits the category mapping only. See `docs/roadmap.md`.

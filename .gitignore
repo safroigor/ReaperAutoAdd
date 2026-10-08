@@ -25,5 +25,5 @@ desktop.ini
 # Local scratch
 /tmp/
 
-# Local settings written by the SFX: Settings window
+# Local settings written by the InsertRandomSFX_Settings.lua window
 scripts/InsertRandomSFX_Settings.ini

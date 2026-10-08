@@ -116,7 +116,7 @@ local BROWSE_PREVIOUS = -1
 
 -- Name of the global settings file. It lives in REAPER's Scripts resource folder
 -- and is edited
--- through the "SFX: Settings" action (InsertRandomSFX_Settings.lua). When present it
+-- through the InsertRandomSFX_Settings.lua script. When present it
 -- overrides the built-in CONFIG.category_folders defaults at startup, so users
 -- never have to edit this file by hand.
 local CONFIG_FILENAME = "InsertRandomSFX_Settings.ini"
@@ -346,7 +346,7 @@ local function serializeCategories(rows)
     local lines = {
         "# REAPER Random SFX Inserter -- category mapping.",
         "# One line per category:  track name = folder",
-        "# Edited by the 'SFX: Settings' action; safe to edit by hand.",
+        "# Edited by InsertRandomSFX_Settings.lua; safe to edit by hand.",
     }
     for _, row in ipairs(rows or {}) do
         local name = normalizeCategoryName(row.name)
@@ -559,7 +559,7 @@ local function seedRandom()
 end
 
 -- ---------------------------------------------------------------------
--- Settings file I/O (used at startup and by the SFX: Settings action)
+-- Settings file I/O (used at startup and by InsertRandomSFX_Settings.lua)
 -- ---------------------------------------------------------------------
 
 -- Directory of the running script (action or module). Used as the fallback
@@ -678,7 +678,7 @@ local function insertRandomForTrackAtPosition(track, position)
     if not directoryExists(folder) then
         return showError(string.format(
             "The %s folder does not exist:\n%s\n\n"
-            .. "Set it in 'SFX: Settings' (settings file: %s).",
+            .. "Set it in InsertRandomSFX_Settings.lua (settings file: %s).",
             category, folder, configFilePath()))
     end
 
@@ -741,7 +741,7 @@ local function browseSample(item, direction)
     local source = getItemMetadata(item, ITEM_META.source)
     if library == "" or source == "" then
         showError("This item has no SFX library metadata.\n\n"
-            .. "Insert it with 'SFX: Insert Random SFX' first.")
+            .. "Insert it with InsertRandomSFX.lua first.")
         return false
     end
 
@@ -838,7 +838,7 @@ end
 -- ENTRY POINT / MODULE HOOK
 -- =====================================================================
 
--- Apply the settings file (edited by the "SFX: Settings" action) over the
+-- Apply the settings file (edited by InsertRandomSFX_Settings.lua) over the
 -- built-in defaults. This runs on every script load, so configuration changes
 -- take effect on the next run. It is skipped outside REAPER (the unit tests),
 -- where `reaper` is undefined.

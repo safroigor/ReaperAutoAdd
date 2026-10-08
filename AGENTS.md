@@ -77,13 +77,12 @@ under the mouse (`GetItemFromPoint`): item present → browse next; no item →
 insert random. It never relies on the selection for browsing.
 
 **Settings** —
-[`InsertRandomSFX_Settings.lua`](scripts/InsertRandomSFX_Settings.lua) (action
-`SFX: Settings`) is a small `gfx` window that edits the track-name → folder
-mapping and writes `InsertRandomSFX_Settings.ini` into REAPER's Scripts resource
-folder (where the scripts live). The core
-reads that file at startup and applies it over the built-in
-`CONFIG.category_folders` defaults, so the mapping can be changed without editing
-any script.
+[`InsertRandomSFX_Settings.lua`](scripts/InsertRandomSFX_Settings.lua) is a small
+`gfx` window that edits the track-name → folder mapping and writes
+`InsertRandomSFX_Settings.ini` into REAPER's Scripts resource folder (where the
+scripts live). The core reads that file at startup and applies it over the
+built-in `CONFIG.category_folders` defaults, so the mapping can be changed
+without editing any script.
 
 Supported formats: `.wav`, `.aif`, `.aiff`, `.flac`, `.ogg`, `.mp3`.
 
@@ -182,7 +181,7 @@ See `docs/architecture.md` for extension points.
   Business logic must not call `reaper.*` directly.
 - **Keep configuration separate from logic.** `CONFIG.category_folders` holds
   the built-in defaults; the live mapping comes from
-  `InsertRandomSFX_Settings.ini` (edited by `SFX: Settings`).
+  `InsertRandomSFX_Settings.ini` (edited by `InsertRandomSFX_Settings.lua`).
   Parsing/serialization stays pure and unit-tested; configuration loading must
   never run when `reaper` is absent (the tests).
 - **Do not introduce external dependencies** without a strong, documented
@@ -288,8 +287,9 @@ These are **ideas, not requirements**. Do not implement them unless the task
 explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
 
 - **Configurable category mapping** — ✅ implemented:
-  `InsertRandomSFX_Settings.ini` in a data file plus the `SFX: Settings` window.
-  (Multiple inline categories were Phase 1.)
+  `InsertRandomSFX_Settings.ini` in a data file plus the
+  `InsertRandomSFX_Settings.lua` window. (Multiple inline categories were
+  Phase 1.)
 - **Additional mouse contexts** — item edge / fade / "Media item bottom half"
   bindings, only if a real workflow needs them. (Alt+left-click on the Track and
   Media item contexts is already implemented — Phase 3.)
@@ -304,6 +304,6 @@ explicitly asks. Ordered roughly by the phases in `docs/roadmap.md`.
 - **Parameter randomisation** — random gain, pitch, pan.
 - **Batch insertion** — several items at once.
 - **Metadata-driven filtering** — read tags/notes for filtering.
-- **UI/settings** — ✅ implemented as the `SFX: Settings` window.
+- **UI/settings** — ✅ implemented as the `InsertRandomSFX_Settings.lua` window.
 - **Native extension** — only if ReaScript eventually proves insufficient for
   the workflow (for example, true mouse hooks). Explicitly out of scope now.

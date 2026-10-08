@@ -22,9 +22,9 @@ No other dependencies. Do not add any.
 ```text
 scripts/InsertRandomSFX.lua        core module + standard action
 scripts/InsertRandomSFXAtMouse.lua Alt+click wrapper (loads the core module)
-scripts/NextSample.lua             "SFX: Next Sample" wrapper
-scripts/PreviousSample.lua         "SFX: Previous Sample" wrapper
-scripts/InsertRandomSFX_Settings.lua "SFX: Settings" gfx window (config editor)
+scripts/NextSample.lua             next-sample wrapper
+scripts/PreviousSample.lua         previous-sample wrapper
+scripts/InsertRandomSFX_Settings.lua settings window (gfx config editor)
 scripts/InsertRandomSFX_Settings.ini created by the settings window (not committed)
 tests/run_tests.lua                unit tests for the pure logic
 docs/                              architecture, development, roadmap
@@ -44,7 +44,7 @@ docs/                              architecture, development, roadmap
 ### Mouse-modifier setup for the Alt+click workflow
 
 In **Preferences → Editing Behavior → Mouse Modifiers**, assign
-`SFX: Insert Random SFX At Mouse` to **both**:
+`InsertRandomSFXAtMouse.lua` to **both**:
 
 - Context **Track**, behavior **left click**, modifier **Alt**
 - Context **Media item**, behavior **left click**, modifier **Alt**
@@ -62,13 +62,13 @@ assigned as a shortcut in the Action List. Recommended:
    (Alt+Wheel)`, and add in order:
    `Item: Select item under mouse cursor`,
    `Skip next action if CC parameter >0/mid`,
-   `SFX: Previous Sample`,
+   `PreviousSample.lua`,
    `Skip next action if CC parameter <0/mid`,
-   `SFX: Next Sample`.
+   `NextSample.lua`.
 2. Select the custom action, click **Add**, hold **Alt** and scroll the wheel.
 
-Simpler alternative: bind `Alt+Mousewheel` to `SFX: Next Sample` and
-`Alt+Shift+Mousewheel` to `SFX: Previous Sample`, selecting the item first.
+Simpler alternative: bind `Alt+Mousewheel` to `NextSample.lua` and
+`Alt+Shift+Mousewheel` to `PreviousSample.lua`, selecting the item first.
 See `README.md` for details.
 
 ### The fast edit loop
@@ -163,14 +163,14 @@ instead of testing it only manually.
 | 15 | **One-file library** | Category folder with a single file, insert several times | Same file inserted repeatedly; no error |
 | 16 | **State persistence** | Insert, then run the action again (new script run) | The previous pick is still avoided |
 
-## Manual test cases — settings window (`SFX: Settings`)
+## Manual test cases — settings window (`InsertRandomSFX_Settings.lua`)
 
-Run the `SFX: Settings` action. The config file (`InsertRandomSFX_Settings.ini`) lives in
-REAPER's Scripts resource folder.
+Run the `InsertRandomSFX_Settings.lua` script. The config file
+(`InsertRandomSFX_Settings.ini`) lives in REAPER's Scripts resource folder.
 
 | # | Scenario | Action | Expected |
 | --- | --- | --- | --- |
-| S1 | First open | Run `SFX: Settings` with no config file | Window shows the built-in defaults; status says no settings file yet |
+| S1 | First open | Run `InsertRandomSFX_Settings.lua` with no config file | Window shows the built-in defaults; status says no settings file yet |
 | S2 | Add | Click Add, enter a name, pick a folder | New row appears, marked "Remember to Save" |
 | S3 | Save | Click Save | `InsertRandomSFX_Settings.ini` is created in REAPER's Scripts resource folder; status confirms |
 | S4 | Applies to insertion | Save new category `door`, create+select a `door` track, insert | Random file inserted from the chosen folder |
@@ -185,7 +185,7 @@ REAPER's Scripts resource folder.
 | S13 | ESC / window close | Press ESC or close the OS window | Window closes without saving |
 | S14 | Long list | Add more rows than fit | Mouse wheel scrolls; selection stays visible |
 | S15 | Read-only folder | Make the Scripts resource folder read-only, Save | Clear write-error status; nothing else changes |
-| S16 | **Settings picked up by the other actions** | Save a new category in `SFX: Settings`, then run `SFX: Insert Random SFX` on a track with that name | The category is used (the insert does not say "not supported") |
+| S16 | **Settings picked up by the other actions** | Save a new category in `InsertRandomSFX_Settings.lua`, then run `InsertRandomSFX.lua` on a track with that name | The category is used (the insert does not say "not supported") |
 | S17 | **Wrong path diagnostic** | Rename/move `InsertRandomSFX_Settings.ini`, run insert on a custom track | Error lists supported names plus the settings file path and "NOT FOUND" |
 
 ## Manual test cases — sample browsing
@@ -195,8 +195,8 @@ selected item inserted by this tool.
 
 | # | Scenario | Action | Expected |
 | --- | --- | --- | --- |
-| B1 | Next | Select the item, run `SFX: Next Sample` | Source becomes the next file in sorted order; item count unchanged |
-| B2 | Previous | Run `SFX: Previous Sample` | Source becomes the previous file |
+| B1 | Next | Select the item, run `NextSample.lua` | Source becomes the next file in sorted order; item count unchanged |
+| B2 | Previous | Run `PreviousSample.lua` | Source becomes the previous file |
 | B3 | Next wrap | At the last file, run Next | Wraps to the first file |
 | B4 | Previous wrap | At the first file, run Previous | Wraps to the last file |
 | B5 | **Position preserved** | Note the item start, browse | `D_POSITION` is exactly unchanged |

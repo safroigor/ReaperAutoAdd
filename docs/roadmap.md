@@ -37,8 +37,9 @@ case-insensitive**. Users can add more categories as configuration.
 
 Still open for later:
 
-- ✅ Mapping moved out of inline Lua into `InsertRandomSFX_Settings.ini`, edited by the
-  `SFX: Settings` window (Phase 4) — users no longer edit the script by hand.
+- ✅ Mapping moved out of inline Lua into `InsertRandomSFX_Settings.ini`, edited
+  by `InsertRandomSFX_Settings.lua` (Phase 4) — users no longer edit the script
+  by hand.
 - ✅ The settings window lists the configured categories, so they are
   discoverable.
 
@@ -103,7 +104,7 @@ Potentially, in rough priority:
   inserted item to a nearby transient.
 - **Random gain / pitch / pan** and light humanisation.
 - **Metadata-driven filtering** — read tags/notes for filtering.
-- ✅ **UI** — the `SFX: Settings` window edits the category mapping.
+- ✅ **UI** — the `InsertRandomSFX_Settings.lua` window edits the category mapping.
 
 Each item should be justified by a real workflow need.
 
